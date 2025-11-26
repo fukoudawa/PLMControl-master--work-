@@ -64,25 +64,37 @@ class SCPIInstrument:
         """
         Возвращает текущее напряжение на источнике питания
         """
-        return round(float(self.instrument.query('MEASURE:VOLTAGE?').strip('\x00')), 2)#type:ignore
+        try:
+            return round(float(self.instrument.query('MEASURE:VOLTAGE?').strip('\x00')), 2)#type:ignore
+        except:
+            return 0.0
 
     def get_current(self):
         """
         Возвращает текущий ток на источнике питания
         """
-        return round(float(self.instrument.query('MEASURE:CURRENT?').strip('\x00')), 2)#type:ignore
+        try:
+            return round(float(self.instrument.query('MEASURE:CURRENT?').strip('\x00')), 2)#type:ignore
+        except:
+            return 0.0
 
     def get_power(self):
         """
         Возвращает текущую мощность на источнике питания
         """
-        return round(float(self.instrument.query('MEASURE:POWER?').strip('\x00')), 2)#type:ignore
+        try:
+            return round(float(self.instrument.query('MEASURE:POWER?').strip('\x00')), 2)#type:ignore
+        except:
+            return 0.0
 
     def get_identification(self):
         """
         Возвращает идентификацию прибора
         """
-        return self.instrument.query('*IDN?')#type:ignore
+        try:   
+            return self.instrument.query('*IDN?')#type:ignore
+        except:
+            return 0.0
 
     def set_output_on(self):
         """

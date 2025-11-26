@@ -10,9 +10,10 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy import create_engine
 import json
 import pyvisa
-from datetime import datetime
+from datetime import datetime, timedelta
 import numpy as np
 from os import path
+from concurrent.futures import ThreadPoolExecutor
 # global poll
 
 
@@ -56,239 +57,99 @@ def calc_cathode_temp(voltage, current, k):
         return T_K
 
 
-# class WriterWorker(QtCore.QObject):
-#     def __init__(self, interval):
-#         QtCore.QObject.__init__(self)
-#         self.interval = interval
-#
-#     def run(self):
-#         pass
+class Reader(QtCore.QObject):
+    reader_result = QtCore.pyqtSignal(dict, dict)
 
+    def __init__(
+        self,
+        read_interval : int,
+        sample        : SCPIInstrument, 
+        discharge     : SCPIInstrument,  
+        solenoid_1    : SCPIInstrument,
+        solenoid_2    : SCPIInstrument, 
+        cathode       : SCPIInstrument, 
+        rrg           : RRGInstrument, 
+        pressure_1    : VacuumeterERSTEVAK,
+        pressure_2    : VacuumeterERSTEVAK, 
+        pressure_3    : VacuumeterERSTEVAK,
+        thermocouple  : NIDAQInstrument,
+        k_value       : float
+    ) -> None:
 
-class ReaderWorker(QtCore.QObject):
-    """
-    Фоновый процесс, который запускается вместе с программой в отдельном потоке и получает данные с приборов
-    return_values - сигнал, который отправляется в основной поток
-    """
-    return_values = QtCore.pyqtSignal(str)
-
-    def __init__(self, read_interval, sample: SCPIInstrument, discharge: SCPIInstrument,  solenoid_1: SCPIInstrument,
-                 solenoid_2: SCPIInstrument, cathode: SCPIInstrument, rrg: RRGInstrument, pressure_1: VacuumeterERSTEVAK,
-                 pressure_2: VacuumeterERSTEVAK, pressure_3: VacuumeterERSTEVAK, k_value: float):
         QtCore.QObject.__init__(self)
+
         self.read_interval = read_interval
-        self.sample = sample
-        self.discharge = discharge
-        self.solenoid_1 = solenoid_1
-        self.solenoid_2 = solenoid_2
-        self.cathode = cathode
-        self.rrg = rrg
-        self.pressure_1 = pressure_1
-        self.pressure_2 = pressure_2
-        self.pressure_3 = pressure_3
-        self.k = k_value
-        self.debug = False
+        self.k             = k_value
 
-    def run(self):
-        if not self.debug:
-            try:
-                while True:
-                    try:
-                        sample_voltage = self.sample.get_voltage()
-                        sample_current = self.sample.get_current()
-                    except Exception as e:
-                        sample_voltage = 0
-                        sample_current = 0
-                    try:
-                        discharge_voltage = self.discharge.get_voltage()
-                        discharge_current = self.discharge.get_current()
-                        discharge_power = self.discharge.get_power()
-                    except Exception:
-                        discharge_voltage = 0
-                        discharge_current = 0
-                        discharge_power = 0
-
-                    try:
-                        solenoid_voltage_1 = self.solenoid_1.get_voltage()
-                        solenoid_current_1 = self.solenoid_1.get_current()
-                    except Exception:
-                        solenoid_voltage_1 = 0
-                        solenoid_current_1 = 0
-
-                    try:
-                        solenoid_voltage_2 = self.solenoid_2.get_voltage()
-                        solenoid_current_2 = self.solenoid_2.get_current()
-                    except Exception:
-                        solenoid_voltage_2 = 0
-                        solenoid_current_2 = 0
-
-                    try:
-                        cathode_voltage = self.cathode.get_voltage()
-                        cathode_current = self.cathode.get_current()
-                        cathode_power = self.cathode.get_power()
-                    except Exception:
-                        cathode_voltage = 0
-                        cathode_current = 0
-                        cathode_power = 0
-
-                    try:
-                        rrg_value = self.rrg.get_flow_inlet()
-                    except Exception:
-                        rrg_value = 0
-
-                    try:
-                        pressure_value_1 = self.pressure_1.return_value()
-                        pressure_value_2 = self.pressure_2.return_value()
-                        pressure_value_3 = self.pressure_3.return_value()
-                    except Exception:
-                        pressure_value_1 = 0
-                        pressure_value_2 = 0
-                        pressure_value_3 = 0
-
-                    T_cathode = calc_cathode_temp(voltage=cathode_voltage, current=cathode_current, k=self.k)
-
-                    poll = {'sample_voltage': sample_voltage,
-                            'sample_current': sample_current,
-                            'discharge_voltage': discharge_voltage,
-                            'discharge_current': discharge_current,
-                            'discharge_power': discharge_power,
-                            'solenoid_voltage_1': solenoid_voltage_1,
-                            'solenoid_current_1': solenoid_current_1,
-                            'solenoid_voltage_2': solenoid_voltage_2,
-                            'solenoid_current_2': solenoid_current_2,
-                            'cathode_voltage': cathode_voltage,
-                            'cathode_current': cathode_current,
-                            'cathode_power': cathode_power,
-                            'T_cathode': T_cathode,
-                            'rrg_value': rrg_value,
-                            'pressure_1': self.pressure_1.return_value(),
-                            'pressure_2': self.pressure_2.return_value(),
-                            'pressure_3': self.pressure_3.return_value()
-                            }
-                    poll = json.dumps(poll)
-                    self.return_values.emit(poll)
-                    time.sleep(self.read_interval / 2)
-            except Exception:
-                print('Failed to implement background reading')
-        else:
-            while True:
-                poll = {'sample_voltage': self.set_random_number(),
-                        'sample_current': self.set_random_number(),
-                        'discharge_voltage': self.set_random_number(),
-                        'discharge_current': self.set_random_number(),
-                        'discharge_power': self.set_random_number(),
-                        'solenoid_voltage_1': self.set_random_number(),
-                        'solenoid_current_1': self.set_random_number(),
-                        'solenoid_voltage_2': self.set_random_number(),
-                        'solenoid_current_2': self.set_random_number(),
-                        'cathode_voltage': self.set_random_number(),
-                        'cathode_current': self.set_random_number(),
-                        'cathode_power': self.set_random_number(),
-                        'T_cathode': self.set_random_number(),
-                        'rrg_value': self.set_random_number(),
-                        'pressure_1': self.set_random_number(),
-                        'pressure_2': self.set_random_number(),
-                        'pressure_3': self.set_random_number()
-                        }
-                poll = json.dumps(poll)
-                self.return_values.emit(poll)
-                time.sleep(self.read_interval / 2)
-
-    def set_random_number(self):
-        return round(random.random() * random.randint(10, 150), 2)
-
-
-class ThermocoupleReaderWorker(QtCore.QObject):
-    # Фоновый процесс чтения данных с термопар
-    # Возвращает json со всеми термопарами
-    return_values = QtCore.pyqtSignal(str)
-
-    def __init__(self, read_interval, thermocouple: NIDAQInstrument):
-        QtCore.QObject.__init__(self)
-        self.read_interval = read_interval
+        self.sample       = sample
+        self.discharge    = discharge
+        self.solenoid_1   = solenoid_1
+        self.solenoid_2   = solenoid_2
+        self.cathode      = cathode
+        self.rrg          = rrg
+        self.pressure_1   = pressure_1
+        self.pressure_2   = pressure_2
+        self.pressure_3   = pressure_3
         self.thermocouple = thermocouple
-        self.channel_start = thermocouple.thermocouple_ch_start
-        self.channel_stop = thermocouple.thermocouple_ch_end
-        self.debug = False
 
-    def run(self):
-        if not self.debug:
-            try:
-                while True:
-                    try:
-                        thermocouple_value = self.thermocouple.read_thermocouple()
-                        for i in range(self.channel_stop + 1):
-                            thermocouple_value[i] = round(thermocouple_value[i], 2)
-                            if thermocouple_value[i] > 1450.0:
-                                thermocouple_value[i] = 0.0
-                        # thermocouple_dict = {
-                        #     'CH0': thermocouple_value[0],
-                        #     'CH1': thermocouple_value[1],
-                        #     'CH2': thermocouple_value[2],
-                        #     'CH3': thermocouple_value[3],
-                        #     'CH4': thermocouple_value[4],
-                        #     'CH5': thermocouple_value[5],
-                        #     'CH6': thermocouple_value[6],
-                        #     'CH7': thermocouple_value[7],
-                        #     'CH8': thermocouple_value[8],
-                        #     'CH9': thermocouple_value[9],
-                        #     'CH10': thermocouple_value[10],
-                        #     'CH11': thermocouple_value[11],
-                        #     'CH12': thermocouple_value[12],
-                        #     'CH13': thermocouple_value[13],
-                        #     'CH14': thermocouple_value[14],
-                        #     'CH15': thermocouple_value[15]
-                        # }
-                        thermocouple_dict = {f'CH{i}': thermocouple_value[i] for i in range(16)}
-                    except Exception:
-                        thermocouple_value = [[0.0 for i in range(self.channel_stop+1)]]
-                        thermocouple_dict = {
-                            'CH0': thermocouple_value[0][0],
-                            'CH1': thermocouple_value[0][1],
-                            'CH2': thermocouple_value[0][2],
-                            'CH3': thermocouple_value[0][3],
-                            'CH4': thermocouple_value[0][4],
-                            'CH5': thermocouple_value[0][5],
-                            'CH6': thermocouple_value[0][6],
-                            'CH7': thermocouple_value[0][7],
-                            'CH8': thermocouple_value[0][8],
-                            'CH9': thermocouple_value[0][9],
-                            'CH10': thermocouple_value[0][10],
-                            'CH11': thermocouple_value[0][11],
-                            'CH12': thermocouple_value[0][12],
-                            'CH13': thermocouple_value[0][13],
-                            'CH14': thermocouple_value[0][14],
-                            'CH15': thermocouple_value[0][15],
-                        }
-                    thermocouple_json = json.dumps(thermocouple_dict)
-                    self.return_values.emit(thermocouple_json)
-                    time.sleep(self.read_interval / 2)
-            except Exception:
-                print('Failed to implement background thermocouple reading')
-        else:
-            while True:
-                thermocouple_value = [[round(random.random() * random.randint(10, 2500), 2) for i in range(self.channel_stop + 1)]]
-                thermocouple_dict = {
-                    'CH0': thermocouple_value[0][0],
-                    'CH1': thermocouple_value[0][1],
-                    'CH2': thermocouple_value[0][2],
-                    'CH3': thermocouple_value[0][3],
-                    'CH4': thermocouple_value[0][4],
-                    'CH5': thermocouple_value[0][5],
-                    'CH6': thermocouple_value[0][6],
-                    'CH7': thermocouple_value[0][7],
-                    'CH8': thermocouple_value[0][8],
-                    'CH9': thermocouple_value[0][9],
-                    'CH10': thermocouple_value[0][10],
-                    'CH11': thermocouple_value[0][11],
-                    'CH12': thermocouple_value[0][12],
-                    'CH13': thermocouple_value[0][13],
-                    'CH14': thermocouple_value[0][14],
-                    'CH15': thermocouple_value[0][15],
-                }
-                thermocouple_json = json.dumps(thermocouple_dict)
-                self.return_values.emit(thermocouple_json)
-                time.sleep(self.read_interval / 2)
+    def run(self) -> None:
+        while True:
+            instrument_data   = {}
+            thermocouple_data = {}
+
+            with ThreadPoolExecutor(max_workers = None) as executor:
+                sample_feature_current     = executor.submit(self.sample.get_current)
+                sample_feature_voltage     = executor.submit(self.sample.get_voltage)
+                discharge_feature_current  = executor.submit(self.discharge.get_current)
+                discharge_feature_voltage  = executor.submit(self.discharge.get_voltage)
+                discharge_feature_power    = executor.submit(self.discharge.get_power)
+                solenoid_1_feature_current = executor.submit(self.solenoid_1.get_current)
+                solenoid_1_feature_voltage = executor.submit(self.solenoid_1.get_voltage)
+                solenoid_2_feature_current = executor.submit(self.solenoid_2.get_current)
+                solenoid_2_feature_voltage = executor.submit(self.solenoid_2.get_voltage)
+                cathode_feature_current    = executor.submit(self.cathode.get_current)
+                cathode_feature_voltage    = executor.submit(self.cathode.get_voltage)
+                cathode_feature_power      = executor.submit(self.cathode.get_power)
+                rrg_feature_inlet          = executor.submit(self.rrg.get_flow_inlet)
+                pressure_1_feature         = executor.submit(self.pressure_1.return_value)
+                pressure_2_feature         = executor.submit(self.pressure_2.return_value)
+                pressure_3_feature         = executor.submit(self.pressure_3.return_value)
+                thermocouple_feature       = executor.submit(self.thermocouple.read_thermocouple)
+
+                # ----------------------------------------------------------------------------
+
+                instrument_data.update({"sample_current"     : sample_feature_current.result()      })
+                instrument_data.update({"sample_voltage"     : sample_feature_voltage.result()      })
+                instrument_data.update({"discharge_current"  : discharge_feature_current.result()   })
+                instrument_data.update({"discharge_voltage"  : discharge_feature_voltage.result()   })
+                instrument_data.update({"discharge_power"    : discharge_feature_power.result()     })
+                instrument_data.update({"solenoid_current_1" : solenoid_1_feature_current.result()  })
+                instrument_data.update({"solenoid_voltage_1" : solenoid_1_feature_voltage.result()  })
+                instrument_data.update({"solenoid_current_2" : solenoid_2_feature_current.result()  })
+                instrument_data.update({"solenoid_voltage_2" : solenoid_2_feature_voltage.result()  })
+                instrument_data.update({"cathode_current"    : cathode_feature_current.result()     })
+                instrument_data.update({"cathode_voltage"    : cathode_feature_voltage.result()     })
+                instrument_data.update({"cathode_power"      : cathode_feature_power.result()       })
+                instrument_data.update({"T_cathode"          : calc_cathode_temp(
+                                                                    voltage = cathode_feature_voltage.result(), 
+                                                                    current = cathode_feature_current.result(), 
+                                                                    k       = self.k)               })
+                instrument_data.update({"rrg_value"          : rrg_feature_inlet.result()           })
+                instrument_data.update({"pressure_1"         : pressure_1_feature.result()          })
+                instrument_data.update({"pressure_2"         : pressure_2_feature.result()          })
+                instrument_data.update({"pressure_3"         : pressure_3_feature.result()          })
+
+                try:
+                    thermocouple_values = thermocouple_feature.result()
+                    for i in range(self.thermocouple.thermocouple_ch_end + 1):
+                        if thermocouple_values[i] > 1450.0: 
+                            thermocouple_data.update({f"CH{i}": 0.0})
+                        else:
+                            thermocouple_data.update({f"CH{i}": round(thermocouple_values[i], 2)}) 
+                except:
+                    thermocouple_data.update({f"CH{i}": 0.0 for i in range(self.thermocouple.thermocouple_ch_end + 1)})   
+
+            self.reader_result.emit(instrument_data, thermocouple_data)
 
 
 class PLMControl(QtWidgets.QMainWindow):
@@ -324,23 +185,18 @@ class PLMControl(QtWidgets.QMainWindow):
 
         self.timestamp_experimental = 0.0
 
-        self.reading_worker = ReaderWorker(read_interval=self.read_interval, sample=self.sample,
+        self.reading_worker = Reader(read_interval=self.read_interval, sample=self.sample,
                                            discharge=self.discharge, solenoid_1=self.solenoid_1,
                                            solenoid_2=self.solenoid_2, cathode=self.cathode,
                                            rrg=self.rrg, pressure_1=self.pressure_1,
-                                           pressure_2=self.pressure_2, pressure_3=self.pressure_3, k_value=self.k)
-        self.thermocouple_reading_worker = ThermocoupleReaderWorker(read_interval=self.thermocouple_fast_read,
-                                                                    thermocouple=self.thermocouple)
+                                           pressure_2=self.pressure_2, pressure_3=self.pressure_3, 
+                                           thermocouple=self.thermocouple, k_value=self.k)
+        
         self.reading_thread = QtCore.QThread()
-        self.thermocouple_reading_thread = QtCore.QThread()
         self.reading_worker.moveToThread(self.reading_thread)
-        self.thermocouple_reading_worker.moveToThread(self.thermocouple_reading_thread)
         self.reading_thread.started.connect(self.reading_worker.run)
-        self.thermocouple_reading_thread.started.connect(self.thermocouple_reading_worker.run)
-        self.reading_worker.return_values.connect(self.get_values)
-        self.thermocouple_reading_worker.return_values.connect(self.thermocouple_get_values)
+        self.reading_worker.reader_result.connect(self.get_values)
         self.reading_thread.start()
-        self.thermocouple_reading_thread.start()
 
         self.init_graphs()
 
@@ -493,13 +349,14 @@ class PLMControl(QtWidgets.QMainWindow):
         commit_time_timestamp = datetime.now().timestamp()
         commit_time = time.strftime("%H:%M:%S", commit_time)
         self.timestamp_experimental = str(self.timestamp_experimental)
+        
         commit = Instruments(
             time=commit_time,
             time_experiment=self.timeFormat,
             timestamp_abs=str(commit_time_timestamp),
             timestamp_experimental=self.timestamp_experimental,
-            instruments_values=self.instrument_json,
-            thermocouples_values=self.thermocouple_json
+            instruments_values=json.dumps(self.instrument_data),
+            thermocouples_values=json.dumps(self.thermocouple_data)
         )
         self.session.add(commit)
         self.session.commit()
@@ -715,99 +572,12 @@ class PLMControl(QtWidgets.QMainWindow):
         self.pressure_3 = VacuumeterERSTEVAK(ip=self.pressure_3_ip, port=self.pressure_3_port,
                                              address=self.pressure_3_address)
 
-    def get_values(self, value):
-        self.instrument_json = value
+    def get_values(self, instrument_value, thermocouple_value):
+        self.instrument_data   = instrument_value
+        self.thermocouple_data = thermocouple_value
 
-    def thermocouple_get_values(self, value):
-        self.thermocouple_json = value
-        thermocouple_dict = json.loads(value)
-        if self.ch0_flag:
-            [self.ch0_plt_fast[0], self.ch0_plt_fast[1]] = update_plot(self.ch0_plt_fast[0],
-                                                                       self.ch0_plt_fast[1],
-                                                                       self.ch0_plt_fast[2],
-                                                                       thermocouple_dict['CH0'])
-        if self.ch1_flag:
-            [self.ch1_plt_fast[0], self.ch1_plt_fast[1]] = update_plot(self.ch1_plt_fast[0],
-                                                                       self.ch1_plt_fast[1],
-                                                                       self.ch1_plt_fast[2],
-                                                                       thermocouple_dict['CH1'])
-        if self.ch2_flag:
-            [self.ch2_plt_fast[0], self.ch2_plt_fast[1]] = update_plot(self.ch2_plt_fast[0],
-                                                                       self.ch2_plt_fast[1],
-                                                                       self.ch2_plt_fast[2],
-                                                                       thermocouple_dict['CH2'])
-        if self.ch3_flag:
-            [self.ch3_plt_fast[0], self.ch3_plt_fast[1]] = update_plot(self.ch3_plt_fast[0],
-                                                                       self.ch3_plt_fast[1],
-                                                                       self.ch3_plt_fast[2],
-                                                                       thermocouple_dict['CH3'])
-
-        if self.ch4_flag:
-            [self.ch4_plt_fast[0], self.ch4_plt_fast[1]] = update_plot(self.ch4_plt_fast[0],
-                                                                       self.ch4_plt_fast[1],
-                                                                       self.ch4_plt_fast[2],
-                                                                       thermocouple_dict['CH4'])
-        if self.ch5_flag:
-            [self.ch5_plt_fast[0], self.ch5_plt_fast[1]] = update_plot(self.ch5_plt_fast[0],
-                                                                       self.ch5_plt_fast[1],
-                                                                       self.ch5_plt_fast[2],
-                                                                       thermocouple_dict['CH5'])
-        if self.ch6_flag:
-            [self.ch6_plt_fast[0], self.ch6_plt_fast[1]] = update_plot(self.ch6_plt_fast[0],
-                                                                       self.ch6_plt_fast[1],
-                                                                       self.ch6_plt_fast[2],
-                                                                       thermocouple_dict['CH6'])
-
-        if self.ch7_flag:
-            [self.ch7_plt_fast[0], self.ch7_plt_fast[1]] = update_plot(self.ch7_plt_fast[0],
-                                                                       self.ch7_plt_fast[1],
-                                                                       self.ch7_plt_fast[2],
-                                                                       thermocouple_dict['CH7'])
-
-        if self.ch8_flag:
-            [self.ch8_plt_fast[0], self.ch8_plt_fast[1]] = update_plot(self.ch8_plt_fast[0],
-                                                                       self.ch8_plt_fast[1],
-                                                                       self.ch8_plt_fast[2],
-                                                                       thermocouple_dict['CH8'])
-        if self.ch9_flag:
-            [self.ch9_plt_fast[0], self.ch9_plt_fast[1]] = update_plot(self.ch9_plt_fast[0],
-                                                                       self.ch9_plt_fast[1],
-                                                                       self.ch9_plt_fast[2],
-                                                                       thermocouple_dict['CH9'])
-        if self.ch10_flag:
-            [self.ch10_plt_fast[0], self.ch10_plt_fast[1]] = update_plot(self.ch10_plt_fast[0],
-                                                                       self.ch10_plt_fast[1],
-                                                                       self.ch10_plt_fast[2],
-                                                                       thermocouple_dict['CH10'])
-        if self.ch11_flag:
-            [self.ch11_plt_fast[0], self.ch11_plt_fast[1]] = update_plot(self.ch11_plt_fast[0],
-                                                                       self.ch11_plt_fast[1],
-                                                                       self.ch11_plt_fast[2],
-                                                                       thermocouple_dict['CH11'])
-
-        if self.ch12_flag:
-            [self.ch12_plt_fast[0], self.ch12_plt_fast[1]] = update_plot(self.ch12_plt_fast[0],
-                                                                       self.ch12_plt_fast[1],
-                                                                       self.ch12_plt_fast[2],
-                                                                       thermocouple_dict['CH12'])
-        if self.ch13_flag:
-            [self.ch13_plt_fast[0], self.ch13_plt_fast[1]] = update_plot(self.ch13_plt_fast[0],
-                                                                       self.ch13_plt_fast[1],
-                                                                       self.ch13_plt_fast[2],
-                                                                       thermocouple_dict['CH13'])
-        if self.ch14_flag:
-            [self.ch14_plt_fast[0], self.ch14_plt_fast[1]] = update_plot(self.ch14_plt_fast[0],
-                                                                       self.ch14_plt_fast[1],
-                                                                       self.ch14_plt_fast[2],
-                                                                       thermocouple_dict['CH14'])
-        if self.ch15_flag:
-            [self.ch15_plt_fast[0], self.ch15_plt_fast[1]] = update_plot(self.ch15_plt_fast[0],
-                                                                       self.ch15_plt_fast[1],
-                                                                       self.ch15_plt_fast[2],
-                                                                       thermocouple_dict['CH15'])
-
-    def display_values(self):
-        value = json.loads(self.instrument_json)
+    def display_values(self): 
+        value = self.instrument_data
         sample_voltage = value['sample_voltage']
         sample_current = value['sample_current']
         discharge_voltage = value['discharge_voltage']
@@ -825,6 +595,7 @@ class PLMControl(QtWidgets.QMainWindow):
         pressure_1 = value['pressure_1']
         pressure_2 = value['pressure_2']
         pressure_3 = value['pressure_3']
+        value_thermocouples = self.thermocouple_data
 
         self.ui_main.u_sample_actual.setText(str(sample_voltage))
         self.ui_main.i_sample_actual.setText(str(sample_current))
@@ -899,7 +670,6 @@ class PLMControl(QtWidgets.QMainWindow):
                                                                    self.gas_flow_plt[2],
                                                                    gas_flow)
 
-        value_thermocouples = json.loads(self.thermocouple_json)
         if self.ch0_flag:
             self.ui_main.ch0.setText(str(value_thermocouples['CH0']))
             [self.ch0_plt[0], self.ch0_plt[1]] = update_plot(self.ch0_plt[0],
