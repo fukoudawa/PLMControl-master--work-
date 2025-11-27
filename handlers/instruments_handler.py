@@ -158,7 +158,7 @@ class RRGInstrument:
 
     def _get_holding_registers(self):
         try:
-            rr = self.client.read_holding_registers(0, 7, slave=self.unit) #type:ignore
+            rr = self.client.read_holding_registers(0, 7, slave=self.unit) 
             self.holding_registers = rr.registers  # list of ints
             self.flag_1 = bin(self.holding_registers[2])  # binary string
             self.flag_1 = self.flag_1[::-1]  # reversed binary string
@@ -213,9 +213,6 @@ class RRGInstrument:
         # 0 - открыт, 1 - закрыт, 2 - регулировка
         try:
             self._get_holding_registers()
-            # if state == 'RRG open 1':
-            #     self.flag_1_int[2] = 1
-            #     self.flag_1_int[3] = 1
             if state == 0:
                 self.flag_1_int[2] = 1
                 self.flag_1_int[3] = 0
@@ -286,13 +283,6 @@ class NIDAQInstrument:
             self.thermal_unit = constants.TemperatureUnits.K 
         try:
             self.task = Task()
-            # try:
-            #     if high_speed_adc:
-            #         self.task.timing.adc_sample_high_speed()
-            #     else:
-            #         pass
-            # except Exception:
-            #     print('Cannot set ADC on thermocouple to high speed mode')
             self.isInitialized = True
             print("(+) Thermocouple initialized")
         except Exception:
@@ -323,23 +313,17 @@ class NIDAQInstrument:
             print(f'Thermocouple {self.name} does not created')
 
     def read_thermocouple(self):
-        # try:
-            value = self.task.read() #type:ignore
-            # time.sleep(self.sleep_time)
-            return value
-        # except Exception:
-        #     print('Cannot read value from thermocouple')
-        #     return None
+        value = self.task.read() 
+        return value
 
     def stop_task(self):
-        self.task.close() #type:ignore
+        self.task.close() 
 
 class VacuumeterERSTEVAK:
     def __init__(self, ip, port, address):
         self.ip = ip
         self.port = port
         self.address = address
-
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s.connect((self.ip, self.port))
@@ -350,7 +334,6 @@ class VacuumeterERSTEVAK:
 
     def return_value(self):
         data = float()
-
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 s.settimeout(2)
@@ -377,62 +360,3 @@ class VacuumeterERSTEVAK:
         command += self.ERSTVAK_CRC64(command)
         command += bytes('\r', 'ascii')
         return command
-
-
-class VacuumeterADC:
-    """
-     Класс, объединяющий методы для работы с вакуумметрами через COM-порт
-     TODO: hardcoded af, переделать?
-    """
-
-    def __init__(self, port, baudrate):
-        self.isInitialized = bool()
-
-        try:
-            self.device = serial.Serial(port=port, baudrate=baudrate)
-            self.isInitialized = True
-            print("(+) Vacuumeter reader initialized")
-
-        except serial.SerialException as se:
-            self.device = serial.Serial()
-            self.isInitialized = False
-            print("(!) Failed to initialize Vacuumeter reader:\t", se)
-
-    def __del__(self):
-        if self.device != None:
-            self.device.close()
-
-    def return_value(self):
-        data = { "Пушка": 0, "Ресивер": 0, "Форвакуумная линия": 0}
-
-        if self.isInitialized:
-            adc_ch = str(self.device.readline()).split(',')
-            adc_voltage = lambda adc, r1, r2, udd: adc * (r2/r1) * (udd/2**16)
-            pressure_ersvak = lambda u: (10**(u-5.5)) * 1.333 # torr
-            pressure_instrue = lambda u: 10**(1.222*u-7.647)  # torr
-
-            data["Пушка"] = pressure_ersvak(adc_voltage(adc_ch[0], 1000, 4500, 5.0))
-            data["Ресивер"] = pressure_instrue(adc_voltage(adc_ch[1], 1000, 4500, 5.0))
-            data["Форвакуумная линия"] = pressure_ersvak(adc_voltage(adc_ch[2], 1000, 4500, 5.0))
-
-        return data
-
-
-
-class ElimInstrument:
-    # Заглушка под управление источниками питания ЭЛИМ
-    pass
-
-if __name__ == "__main__":
-    VacuumeterERSTEVAK(
-        ip = '192.168.0.32',
-        port = 501,
-        address = 3
-    )
-
-
-
-
-
-
-
