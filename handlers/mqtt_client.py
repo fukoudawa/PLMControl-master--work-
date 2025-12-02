@@ -1,4 +1,4 @@
-from typing import Callable
+from typing import Callable, Optional
 from paho.mqtt import client as mqtt_client
 
 class MQTTDevice:
@@ -100,3 +100,56 @@ class MQTTDevice:
                 return measure
             return publish
         return wrapper 
+    
+
+class MQTTClient:
+    def __init__(self, configs: Optional[dict] = None) -> None:
+        self.__client: mqtt_client.Client | None = None
+        self.__id    : str                | None = None
+
+        if isinstance(configs, dict): self.connect(configs)
+
+    def __del__(self) -> None:
+        self.disconnect()
+
+    @property
+    def isOnline(self) -> bool: 
+        return self.__client.is_connected() if isinstance(self.__client, mqtt_client.Client) else False
+
+    def connect(self, configs: dict) -> bool:
+        """ Подключить клиент к MQTT брокеру (без аутентификации) с
+            параметрами брокера и клиента configs
+        """
+
+        if self.isOnline: self.disconnect()
+
+        try:
+            self.__id = configs["id"]
+            self.__client = mqtt_client.Client(
+                client_id            = self.__id, 
+                callback_api_version = mqtt_client.CallbackAPIVersion.VERSION2
+            )
+            self.__client.connect(configs["broker"], configs["port"])
+            self.__client.loop_start()
+        except Exception as e:
+            print(f"[!] Failed to connect to the MQTT Broker: {e}")
+
+        return self.isOnline
+    
+    def disconnect(self) -> bool:
+        """ Отключить клиента от MQTT брокера """
+
+        if self.isOnline:
+            self.__client.loop_stop()
+            self.__client.disconnect()      
+        return not self.isOnline
+
+    def publish(self, data: float, topic: str) -> bool:
+        """ Опубликовать data в topic """
+
+        try:
+            self.__client.publish(f"{self.__id}/{topic}", f"{data}")
+            return True
+        except Exception as e:
+            print(f"[!] Failed to publish the message with topic '{self.__id}/{topic}': {e}")
+            return False

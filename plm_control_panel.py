@@ -14,6 +14,7 @@ from datetime import datetime, timedelta
 import numpy as np
 from os import path
 from concurrent.futures import ThreadPoolExecutor
+from handlers.mqtt_client import MQTTClient
 # global poll
 
 
@@ -73,13 +74,16 @@ class Reader(QtCore.QObject):
         pressure_2    : VacuumeterERSTEVAK, 
         pressure_3    : VacuumeterERSTEVAK,
         thermocouple  : NIDAQInstrument,
-        k_value       : float
+        k_value       : float,
+        mqtt_configs  : dict
     ) -> None:
 
         QtCore.QObject.__init__(self)
 
         self.read_interval = read_interval
         self.k             = k_value
+
+        self.client       = MQTTClient(mqtt_configs)
 
         self.sample       = sample
         self.discharge    = discharge
@@ -149,7 +153,15 @@ class Reader(QtCore.QObject):
                 except:
                     thermocouple_data.update({f"CH{i}": 0.0 for i in range(self.thermocouple.thermocouple_ch_end + 1)})   
 
+            # ----------------------- Publish the data --------------------------------
+
             self.reader_result.emit(instrument_data, thermocouple_data)
+
+            for topic, value in instrument_data.items():
+                self.client.publish(value, f"instruments/{topic}")
+
+            for topic, value in thermocouple_data.items():
+                self.client.publish(value, f"thermocouples/{topic}")
 
 
 class PLMControl(QtWidgets.QMainWindow):
@@ -190,7 +202,8 @@ class PLMControl(QtWidgets.QMainWindow):
                                            solenoid_2=self.solenoid_2, cathode=self.cathode,
                                            rrg=self.rrg, pressure_1=self.pressure_1,
                                            pressure_2=self.pressure_2, pressure_3=self.pressure_3, 
-                                           thermocouple=self.thermocouple, k_value=self.k)
+                                           thermocouple=self.thermocouple, k_value=self.k,
+                                           mqtt_configs=self.mqtt_configs)
         
         self.reading_thread = QtCore.QThread()
         self.reading_worker.moveToThread(self.reading_thread)
@@ -418,6 +431,8 @@ class PLMControl(QtWidgets.QMainWindow):
         with open(config_path) as config_json:
             self.config = json.load(config_json)
 
+        self.mqtt_configs = self.config["mqtt"]
+
         self.read_interval = float(self.config['Read_interval'])
         self.write_interval = float(self.config['Write_interval'])
         self.journal_auto_update = float(self.config['Journal_auto_update'])
@@ -426,27 +441,27 @@ class PLMControl(QtWidgets.QMainWindow):
 
         self.sample_ip = self.config['sample_properties'][0]['IP']
         self.sample_connect = self.config['sample_properties'][0]['connection_type']
-        self.sample_mqtt = self.config['sample_properties'][0]['mqtt']
+        #self.sample_mqtt = self.config['sample_properties'][0]['mqtt']
         
         self.discharge_ip = self.config['discharge_properties'][0]['IP']
         self.discharge_connect = self.config['discharge_properties'][0]['connection_type']
-        self.discharge_mqtt = self.config['discharge_properties'][0]['mqtt']
+        #self.discharge_mqtt = self.config['discharge_properties'][0]['mqtt']
         
         self.solenoid_ip = self.config['solenoid_properties'][0]['IP']
         self.solenoid_connect = self.config['solenoid_properties'][0]['connection_type']
-        self.solenoid_mqtt = self.config['solenoid_properties'][0]['mqtt']
+        #self.solenoid_mqtt = self.config['solenoid_properties'][0]['mqtt']
         
         self.solenoid_ip_2 = self.config['solenoid_properties'][1]['IP']
         self.solenoid_connect_2 = self.config['solenoid_properties'][1]['connection_type']
-        self.solenoid_2_mqtt = self.config['solenoid_properties'][1]['mqtt']
+        #self.solenoid_2_mqtt = self.config['solenoid_properties'][1]['mqtt']
         
         self.solenoid_ip_3 = self.config['solenoid_properties'][2]['IP']
         self.solenoid_connect_3 = self.config['solenoid_properties'][2]['connection_type']
-        self.solenoid_3_mqtt = self.config['solenoid_properties'][2]['mqtt']
+        #self.solenoid_3_mqtt = self.config['solenoid_properties'][2]['mqtt']
         
         self.cathode_ip = self.config['cathode_properties'][0]['IP']
         self.cathode_connect = self.config['cathode_properties'][0]['connection_type']
-        self.cathode_mqtt = self.config['cathode_properties'][0]['mqtt']
+        #self.cathode_mqtt = self.config['cathode_properties'][0]['mqtt']
 
         self.thermocouple_path = self.config['Thermocouple'][0]['Path']
         self.thermocouple_array_size = int(self.config['Thermocouple'][0]['Array_size'])
@@ -457,22 +472,22 @@ class PLMControl(QtWidgets.QMainWindow):
         self.rrg_port = self.config['RRG_connection'][0]['COM_port']
         self.rrg_baudrate = int(self.config['RRG_connection'][0]['Baudrate'])
         self.rrg_address = int(self.config['RRG_connection'][0]['Address'])
-        self.rrg_mqtt = self.config['RRG_connection'][0]['mqtt']
+        #self.rrg_mqtt = self.config['RRG_connection'][0]['mqtt']
 
         self.pressure_1_ip = self.config['Pressure1'][0]['ip']
         self.pressure_1_port = int(self.config['Pressure1'][0]['port'])
         self.pressure_1_address = int(self.config['Pressure1'][0]['address'])
-        self.pressure_1_mqtt = self.config['Pressure1'][0]['mqtt']
+        #self.pressure_1_mqtt = self.config['Pressure1'][0]['mqtt']
         
         self.pressure_2_ip = self.config['Pressure2'][0]['ip']
         self.pressure_2_port = int(self.config['Pressure2'][0]['port'])
         self.pressure_2_address = int(self.config['Pressure2'][0]['address'])
-        self.pressure_2_mqtt = self.config['Pressure2'][0]['mqtt']
+        #self.pressure_2_mqtt = self.config['Pressure2'][0]['mqtt']
         
         self.pressure_3_ip = self.config['Pressure3'][0]['ip']
         self.pressure_3_port = int(self.config['Pressure3'][0]['port'])
         self.pressure_3_address = int(self.config['Pressure3'][0]['address'])
-        self.pressure_3_mqtt = self.config['Pressure3'][0]['mqtt']
+        #self.pressure_3_mqtt = self.config['Pressure3'][0]['mqtt']
 
         self.ui_main.set_u_sample.setMinimum(-int(self.config['sample_properties'][0]['Voltage_limit']))
         self.ui_main.set_u_sample.setMaximum(int(self.config['sample_properties'][0]['Voltage_limit']))
@@ -542,31 +557,31 @@ class PLMControl(QtWidgets.QMainWindow):
     def _init_instruments(self):
         print("Establishing connection with sensors...")
         self.rm = pyvisa.ResourceManager()
-        self.sample = SCPIInstrument(self.rm, self.sample_connect, self.sample_ip, 5025, name='Sample', mqtt_configs = self.sample_mqtt)
+        self.sample = SCPIInstrument(self.rm, self.sample_connect, self.sample_ip, 5025, name='Sample')
         if not self.sample.isInitialized:
             self.ui_main.check_remote_sample.setDisabled(True)
 
-        self.discharge = SCPIInstrument(self.rm, self.discharge_connect, self.discharge_ip, 0, name='Discharge', mqtt_configs = self.discharge_mqtt)
+        self.discharge = SCPIInstrument(self.rm, self.discharge_connect, self.discharge_ip, 0, name='Discharge')
         if not self.discharge.isInitialized:
             self.ui_main.check_remote_discharge.setDisabled(True)
 
-        self.solenoid_1 = SCPIInstrument(self.rm, self.solenoid_connect, self.solenoid_ip, 5025, name='Solenoid', mqtt_configs = self.solenoid_mqtt)
+        self.solenoid_1 = SCPIInstrument(self.rm, self.solenoid_connect, self.solenoid_ip, 5025, name='Solenoid')
         if not self.solenoid_1.isInitialized:
             self.ui_main.check_remote_solenoid_1.setDisabled(True)
 
-        self.solenoid_2 = SCPIInstrument(self.rm, self.solenoid_connect_2, self.solenoid_ip_2, 0, name='Solenoid 2', mqtt_configs = self.solenoid_2_mqtt)
+        self.solenoid_2 = SCPIInstrument(self.rm, self.solenoid_connect_2, self.solenoid_ip_2, 0, name='Solenoid 2')
         if not self.solenoid_2.isInitialized:
             self.ui_main.check_remote_solenoid_2.setDisabled(True)
 
-        self.solenoid_3 = SCPIInstrument(self.rm, self.solenoid_connect_3, self.solenoid_ip_3, 0, name='Solenoid 3', mqtt_configs = self.solenoid_3_mqtt)
+        self.solenoid_3 = SCPIInstrument(self.rm, self.solenoid_connect_3, self.solenoid_ip_3, 0, name='Solenoid 3')
         if not self.solenoid_3.isInitialized:
             self.ui_main.check_remote_solenoid_3.setDisabled(True)
 
-        self.cathode = SCPIInstrument(self.rm, self.cathode_connect, self.cathode_ip, 0, name='Cathode', mqtt_configs = self.cathode_mqtt)
+        self.cathode = SCPIInstrument(self.rm, self.cathode_connect, self.cathode_ip, 0, name='Cathode')
         if not self.cathode.isInitialized:
             self.ui_main.check_remote_cathode.setDisabled(True)
 
-        self.rrg = RRGInstrument(unit=self.rrg_address, method='rtu', port=self.rrg_port, baudrate=self.rrg_baudrate, mqtt_configs = self.rrg_mqtt)
+        self.rrg = RRGInstrument(unit=self.rrg_address, method='rtu', port=self.rrg_port, baudrate=self.rrg_baudrate)
         if not self.rrg.isInitialized:
             self.ui_main.set_rrg_state.setDisabled(True)
         self.rrg.set_flow(0)
@@ -582,11 +597,11 @@ class PLMControl(QtWidgets.QMainWindow):
             pass
 
         self.pressure_1 = VacuumeterERSTEVAK(ip=self.pressure_1_ip, port=self.pressure_1_port,
-                                             address=self.pressure_1_address, mqtt_configs = self.pressure_1_mqtt)
+                                             address=self.pressure_1_address)
         self.pressure_2 = VacuumeterERSTEVAK(ip=self.pressure_2_ip, port=self.pressure_2_port,
-                                             address=self.pressure_2_address, mqtt_configs = self.pressure_2_mqtt)
+                                             address=self.pressure_2_address)
         self.pressure_3 = VacuumeterERSTEVAK(ip=self.pressure_3_ip, port=self.pressure_3_port,
-                                             address=self.pressure_3_address, mqtt_configs = self.pressure_3_mqtt)
+                                             address=self.pressure_3_address)
 
     def get_values(self, instrument_value, thermocouple_value):
         self.instrument_data   = instrument_value

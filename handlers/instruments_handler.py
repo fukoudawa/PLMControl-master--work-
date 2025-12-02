@@ -3,15 +3,13 @@ import time
 import serial
 from pymodbus.client import ModbusSerialClient
 import socket
-from .mqtt_client import MQTTDevice 
 
 
-class SCPIInstrument(MQTTDevice):
+class SCPIInstrument:
     """
     Класс, реализующий управление источниками питания через протокол SCPI
     """
-    def __init__(self, rm, connection_type, ip, port, name, mqtt_configs, sleep_time=0.01):
-        MQTTDevice.__init__(self)
+    def __init__(self, rm, connection_type, ip, port, name, sleep_time=0.01):
         
         self.name = name  # название прибора
         self.isInitialized = bool()  # флаг инициализации
@@ -27,17 +25,11 @@ class SCPIInstrument(MQTTDevice):
             #print(self.get_identification())
             print(f'(+) {self.name} initialized: {self.get_identification()}')
             self.isInitialized = True
-            
-            MQTTDevice.configure(self, mqtt_configs)
-            MQTTDevice.connect()
 
         except Exception as e:
             self.instrument = None
             print(f'(!) {self.name} failed to initialize:\t{e}')
             self.IsInitialized = False
-            
-    def __del__(self) -> None:
-        MQTTDevice.__del__(self)
 
     def set_voltage(self, value: float):
         """
@@ -69,7 +61,6 @@ class SCPIInstrument(MQTTDevice):
         except Exception:
             pass
 
-    @MQTTDevice.topic("voltage")
     def get_voltage(self):
         """
         Возвращает текущее напряжение на источнике питания
@@ -79,7 +70,6 @@ class SCPIInstrument(MQTTDevice):
         except:
             return 0.0
 
-    @MQTTDevice.topic("current")
     def get_current(self):
         """
         Возвращает текущий ток на источнике питания
@@ -89,7 +79,6 @@ class SCPIInstrument(MQTTDevice):
         except:
             return 0.0
 
-    @MQTTDevice.topic("power")
     def get_power(self):
         """
         Возвращает текущую мощность на источнике питания
@@ -176,9 +165,9 @@ class PyrometerInstrument:
         return value[9:len(value)-3]                 # достаём из строки значение температуры на пирометре
 
 
-class RRGInstrument(MQTTDevice):
+class RRGInstrument:
 
-    def __init__(self, unit, method, port, baudrate, mqtt_configs):
+    def __init__(self, unit, method, port, baudrate):
         self.isInitialized = bool()
         self.unit = unit
         try:
@@ -186,17 +175,11 @@ class RRGInstrument(MQTTDevice):
             self.client.connect()
             self.isInitialized = True
             
-            MQTTDevice.configure(self, mqtt_configs)
-            MQTTDevice.connect(self)
-            
             print("(+) RRG initialized")
         except Exception as e:
             self.isInitialized = False
             self.client = None
             print("(!) Failed to initialize RRG:\t", e)
-            
-    def __del__(self) -> None:
-        MQTTDevice.__del__(self)
 
     def _get_holding_registers(self):
         try:
@@ -235,7 +218,6 @@ class RRGInstrument(MQTTDevice):
 
         return result
 
-    @MQTTDevice.topic("flow_inlet")
     def get_flow_inlet(self):
         try:
             self._get_holding_registers()
@@ -249,7 +231,6 @@ class RRGInstrument(MQTTDevice):
                 print('(ERROR) RRG: Cannot get flow inlet')
             return 0
 
-    @MQTTDevice.topic("flow_outlet")
     def get_flow_outlet(self):
         pass
 
@@ -374,8 +355,8 @@ class NIDAQInstrument:
     def stop_task(self):
         self.task.close() #type:ignore
 
-class VacuumeterERSTEVAK(MQTTDevice):
-    def __init__(self, ip, port, address, mqtt_configs):
+class VacuumeterERSTEVAK:
+    def __init__(self, ip, port, address):
         self.ip = ip
         self.port = port
         self.address = address
@@ -384,18 +365,11 @@ class VacuumeterERSTEVAK(MQTTDevice):
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s.connect((self.ip, self.port))
             
-            MQTTDevice.configure(self, mqtt_configs)
-            MQTTDevice.connect(self)
-            
             print("(+) Vacuumeter reader initialized")
         except OSError as e:
             s.close()
             print("(!) Failed to initialize Vacuumeter reader:\t", e)
-            
-    def __del__(self) -> None:
-        MQTTDevice().__del__(self)
-
-    @MQTTDevice.topic("pressure")
+        
     def return_value(self):
         data = float()
 
