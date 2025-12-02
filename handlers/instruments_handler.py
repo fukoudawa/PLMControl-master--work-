@@ -10,6 +10,7 @@ class SCPIInstrument:
     Класс, реализующий управление источниками питания через протокол SCPI
     """
     def __init__(self, rm, connection_type, ip, port, name, sleep_time=0.01):
+        
         self.name = name  # название прибора
         self.isInitialized = bool()  # флаг инициализации
         self.sleep_time = sleep_time  # интервал между командами
@@ -173,6 +174,7 @@ class RRGInstrument:
             self.client = ModbusSerialClient(port=port, baudrate=baudrate)
             self.client.connect()
             self.isInitialized = True
+            
             print("(+) RRG initialized")
         except Exception as e:
             self.isInitialized = False
@@ -362,11 +364,12 @@ class VacuumeterERSTEVAK:
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s.connect((self.ip, self.port))
+            
             print("(+) Vacuumeter reader initialized")
         except OSError as e:
             s.close()
             print("(!) Failed to initialize Vacuumeter reader:\t", e)
-
+        
     def return_value(self):
         data = float()
 

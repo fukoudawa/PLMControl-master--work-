@@ -14,6 +14,7 @@ from datetime import datetime, timedelta
 import numpy as np
 from os import path
 from concurrent.futures import ThreadPoolExecutor
+from handlers.mqtt_client import MQTTProducer
 # global poll
 
 
@@ -73,13 +74,16 @@ class Reader(QtCore.QObject):
         pressure_2    : VacuumeterERSTEVAK, 
         pressure_3    : VacuumeterERSTEVAK,
         thermocouple  : NIDAQInstrument,
-        k_value       : float
+        k_value       : float,
+        mqtt_configs  : dict
     ) -> None:
 
         QtCore.QObject.__init__(self)
 
         self.read_interval = read_interval
         self.k             = k_value
+
+        self.client       = MQTTProducer(mqtt_configs)
 
         self.sample       = sample
         self.discharge    = discharge
@@ -149,7 +153,15 @@ class Reader(QtCore.QObject):
                 except:
                     thermocouple_data.update({f"CH{i}": 0.0 for i in range(self.thermocouple.thermocouple_ch_end + 1)})   
 
+            # ----------------------- Publish the data --------------------------------
+
             self.reader_result.emit(instrument_data, thermocouple_data)
+
+            for topic, value in instrument_data.items():
+                self.client.publish(value, f"instruments/{topic}")
+
+            for topic, value in thermocouple_data.items():
+                self.client.publish(value, f"thermocouples/{topic}")
 
 
 class PLMControl(QtWidgets.QMainWindow):
@@ -190,7 +202,8 @@ class PLMControl(QtWidgets.QMainWindow):
                                            solenoid_2=self.solenoid_2, cathode=self.cathode,
                                            rrg=self.rrg, pressure_1=self.pressure_1,
                                            pressure_2=self.pressure_2, pressure_3=self.pressure_3, 
-                                           thermocouple=self.thermocouple, k_value=self.k)
+                                           thermocouple=self.thermocouple, k_value=self.k,
+                                           mqtt_configs=self.mqtt_configs)
         
         self.reading_thread = QtCore.QThread()
         self.reading_worker.moveToThread(self.reading_thread)
@@ -418,6 +431,8 @@ class PLMControl(QtWidgets.QMainWindow):
         with open(config_path) as config_json:
             self.config = json.load(config_json)
 
+        self.mqtt_configs = self.config["mqtt"]
+
         self.read_interval = float(self.config['Read_interval'])
         self.write_interval = float(self.config['Write_interval'])
         self.journal_auto_update = float(self.config['Journal_auto_update'])
@@ -425,18 +440,28 @@ class PLMControl(QtWidgets.QMainWindow):
         self.graph_size = int(self.config['Graph_size'])
 
         self.sample_ip = self.config['sample_properties'][0]['IP']
-        self.discharge_ip = self.config['discharge_properties'][0]['IP']
-        self.solenoid_ip = self.config['solenoid_properties'][0]['IP']
-        self.solenoid_ip_2 = self.config['solenoid_properties'][1]['IP']
-        self.solenoid_ip_3 = self.config['solenoid_properties'][2]['IP']
-        self.cathode_ip = self.config['cathode_properties'][0]['IP']
-
         self.sample_connect = self.config['sample_properties'][0]['connection_type']
+        #self.sample_mqtt = self.config['sample_properties'][0]['mqtt']
+        
+        self.discharge_ip = self.config['discharge_properties'][0]['IP']
         self.discharge_connect = self.config['discharge_properties'][0]['connection_type']
+        #self.discharge_mqtt = self.config['discharge_properties'][0]['mqtt']
+        
+        self.solenoid_ip = self.config['solenoid_properties'][0]['IP']
         self.solenoid_connect = self.config['solenoid_properties'][0]['connection_type']
+        #self.solenoid_mqtt = self.config['solenoid_properties'][0]['mqtt']
+        
+        self.solenoid_ip_2 = self.config['solenoid_properties'][1]['IP']
         self.solenoid_connect_2 = self.config['solenoid_properties'][1]['connection_type']
+        #self.solenoid_2_mqtt = self.config['solenoid_properties'][1]['mqtt']
+        
+        self.solenoid_ip_3 = self.config['solenoid_properties'][2]['IP']
         self.solenoid_connect_3 = self.config['solenoid_properties'][2]['connection_type']
+        #self.solenoid_3_mqtt = self.config['solenoid_properties'][2]['mqtt']
+        
+        self.cathode_ip = self.config['cathode_properties'][0]['IP']
         self.cathode_connect = self.config['cathode_properties'][0]['connection_type']
+        #self.cathode_mqtt = self.config['cathode_properties'][0]['mqtt']
 
         self.thermocouple_path = self.config['Thermocouple'][0]['Path']
         self.thermocouple_array_size = int(self.config['Thermocouple'][0]['Array_size'])
@@ -447,16 +472,22 @@ class PLMControl(QtWidgets.QMainWindow):
         self.rrg_port = self.config['RRG_connection'][0]['COM_port']
         self.rrg_baudrate = int(self.config['RRG_connection'][0]['Baudrate'])
         self.rrg_address = int(self.config['RRG_connection'][0]['Address'])
+        #self.rrg_mqtt = self.config['RRG_connection'][0]['mqtt']
 
         self.pressure_1_ip = self.config['Pressure1'][0]['ip']
         self.pressure_1_port = int(self.config['Pressure1'][0]['port'])
         self.pressure_1_address = int(self.config['Pressure1'][0]['address'])
+        #self.pressure_1_mqtt = self.config['Pressure1'][0]['mqtt']
+        
         self.pressure_2_ip = self.config['Pressure2'][0]['ip']
         self.pressure_2_port = int(self.config['Pressure2'][0]['port'])
         self.pressure_2_address = int(self.config['Pressure2'][0]['address'])
+        #self.pressure_2_mqtt = self.config['Pressure2'][0]['mqtt']
+        
         self.pressure_3_ip = self.config['Pressure3'][0]['ip']
         self.pressure_3_port = int(self.config['Pressure3'][0]['port'])
         self.pressure_3_address = int(self.config['Pressure3'][0]['address'])
+        #self.pressure_3_mqtt = self.config['Pressure3'][0]['mqtt']
 
         self.ui_main.set_u_sample.setMinimum(-int(self.config['sample_properties'][0]['Voltage_limit']))
         self.ui_main.set_u_sample.setMaximum(int(self.config['sample_properties'][0]['Voltage_limit']))
