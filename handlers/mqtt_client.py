@@ -151,7 +151,7 @@ class MQTTProducer:
             try:
                 self.__client.connect(self.__broker, self.__port)
                 self.__client.loop_start()
-                print("[+] Publisher was successfully connected to the MQTT broker")
+                # print("[+] Publisher was successfully connected to the MQTT broker")
             except Exception as e:
                 print(f"[!] Failed to connect to the MQTT Broker: {e}")
         else:

@@ -174,7 +174,7 @@ class Reader(QtCore.QObject):
             try:
                 self.reader_result.emit(instrument_data, thermocouple_data)
             except Exception as e:
-                print(f"Error: {e}")
+                pass
 
             self.client.connect()
 
