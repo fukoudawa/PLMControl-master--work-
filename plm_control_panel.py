@@ -555,15 +555,15 @@ class PLMControl(QtWidgets.QMainWindow):
         self.ui_main.set_p_solenoid_slider_2.setMaximum(int(self.config['solenoid_properties'][1]['Power_limit']))
         self.ui_main.set_p_solenoid_slider_2.setInterval(0.01)
 
-        self.ui_main.set_u_solenoid_3.setMaximum(int(self.config['solenoid_properties'][2]['Voltage_limit']))
-        self.ui_main.set_u_solenoid_slider_3.setMaximum(int(self.config['solenoid_properties'][2]['Voltage_limit']))
-        self.ui_main.set_u_solenoid_slider_3.setInterval(0.01)
-        self.ui_main.set_i_solenoid_3.setMaximum(int(self.config['solenoid_properties'][2]['Current_limit']))
-        self.ui_main.set_i_solenoid_slider_3.setMaximum(int(self.config['solenoid_properties'][2]['Current_limit']))
-        self.ui_main.set_i_solenoid_slider_3.setInterval(0.01)
-        self.ui_main.set_p_solenoid_3.setMaximum(int(self.config['solenoid_properties'][2]['Power_limit']))
-        self.ui_main.set_p_solenoid_slider_3.setMaximum(int(self.config['solenoid_properties'][2]['Power_limit']))
-        self.ui_main.set_p_solenoid_slider_3.setInterval(0.01)
+        # self.ui_main.set_u_solenoid_3.setMaximum(int(self.config['solenoid_properties'][2]['Voltage_limit']))
+        # self.ui_main.set_u_solenoid_slider_3.setMaximum(int(self.config['solenoid_properties'][2]['Voltage_limit']))
+        # self.ui_main.set_u_solenoid_slider_3.setInterval(0.01)
+        # self.ui_main.set_i_solenoid_3.setMaximum(int(self.config['solenoid_properties'][2]['Current_limit']))
+        # self.ui_main.set_i_solenoid_slider_3.setMaximum(int(self.config['solenoid_properties'][2]['Current_limit']))
+        # self.ui_main.set_i_solenoid_slider_3.setInterval(0.01)
+        # self.ui_main.set_p_solenoid_3.setMaximum(int(self.config['solenoid_properties'][2]['Power_limit']))
+        # self.ui_main.set_p_solenoid_slider_3.setMaximum(int(self.config['solenoid_properties'][2]['Power_limit']))
+        # self.ui_main.set_p_solenoid_slider_3.setInterval(0.01)
 
         self.ui_main.set_u_cathode.setMaximum(int(self.config['cathode_properties'][0]['Voltage_limit']))
         self.ui_main.set_u_cathode_slider.setMaximum(int(self.config['cathode_properties'][0]['Voltage_limit']))
@@ -599,9 +599,9 @@ class PLMControl(QtWidgets.QMainWindow):
         if not self.solenoid_2.isInitialized:
             self.ui_main.check_remote_solenoid_2.setDisabled(True)
 
-        self.solenoid_3 = SCPIInstrument(self.rm, self.solenoid_connect_3, self.solenoid_ip_3, 0, name='Solenoid 3')
-        if not self.solenoid_3.isInitialized:
-            self.ui_main.check_remote_solenoid_3.setDisabled(True)
+        # self.solenoid_3 = SCPIInstrument(self.rm, self.solenoid_connect_3, self.solenoid_ip_3, 0, name='Solenoid 3')
+        # if not self.solenoid_3.isInitialized:
+        #     self.ui_main.check_remote_solenoid_3.setDisabled(True)
 
         self.cathode = SCPIInstrument(self.rm, self.cathode_connect, self.cathode_ip, 0, name='Cathode')
         if not self.cathode.isInitialized:
