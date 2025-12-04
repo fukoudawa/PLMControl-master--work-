@@ -104,10 +104,13 @@ class MQTTDevice:
 
 class MQTTProducer:
     def __init__(self, configs: Optional[dict] = None) -> None:
-        self.__client : mqtt_client.Client | None = None
-        self.__id     : str                | None = None
+        self.__broker   : Optional[str]                = None
+        self.__port     : Optional[int]                = None
+        self.__id       : Optional[str]                = None
+        self.__client   : Optional[mqtt_client.Client] = None
+        self.__isInited : bool                         = False
 
-        if isinstance(configs, dict): self.connect(configs)
+        if isinstance(configs, dict): self.configure(configs)
 
     def __del__(self) -> None:
         self.disconnect()
@@ -116,23 +119,43 @@ class MQTTProducer:
     def isOnline(self) -> bool: 
         return self.__client.is_connected() if isinstance(self.__client, mqtt_client.Client) else False
 
-    def connect(self, configs: dict) -> bool:
-        """ Подключиться к MQTT брокеру (без аутентификации) с
-            параметрами брокера и producer'а configs
+    def configure(self, configs: dict) -> bool:
+        """ Сконфигурировать MQTT producer'а
+            Parameters:
+                configs (dict): параметры конфигурации
         """
 
-        if self.isOnline: self.disconnect()
-
         try:
-            self.__id = configs["id"]
+            self.__broker = configs["broker"]
+            self.__port   = configs["port"]
+            self.__id     = configs["id"]
             self.__client = mqtt_client.Client(
                 client_id            = self.__id, 
                 callback_api_version = mqtt_client.CallbackAPIVersion.VERSION2
             )
-            self.__client.connect(configs["broker"], configs["port"])
-            self.__client.loop_start()
-        except Exception as e:
-            print(f"[!] Failed to connect to the MQTT Broker: {e}")
+            self.__isInited = True
+        except KeyError as error:
+            self.__client   = None
+            self.__isInited = False
+            print(f"[!] Failed to configure the device's basic operating parameters: missing {error}")
+
+        return self.__isInited
+
+    def connect(self) -> bool:
+        """ Подключиться к MQTT брокеру (без аутентификации) с
+            параметрами брокера и producer'а configs
+        """
+
+        if self.__isInited:
+            if self.isOnline: self.disconnect()
+            try:
+                self.__client.connect(self.__broker, self.__port)
+                self.__client.loop_start()
+                # print("[+] Publisher was successfully connected to the MQTT broker")
+            except Exception as e:
+                print(f"[!] Failed to connect to the MQTT Broker: {e}")
+        else:
+            print("[!] Failed to connect to the MQTT Broker: device is not configurated")
 
         return self.isOnline
     
@@ -141,8 +164,9 @@ class MQTTProducer:
 
         if self.isOnline:
             self.__client.loop_stop()
-            self.__client.disconnect()      
-        return not self.isOnline
+            self.__client.disconnect()  
+
+        return not self.isOnline    
 
     def publish(self, data: float, topic: str) -> bool:
         """ Опубликовать data в topic """

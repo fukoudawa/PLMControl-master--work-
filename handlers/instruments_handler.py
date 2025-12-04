@@ -327,28 +327,32 @@ class VacuumeterERSTEVAK:
         self.ip = ip
         self.port = port
         self.address = address
+        self.inited = False
+
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s.connect((self.ip, self.port))
-            
-            print("(+) Vacuumeter reader initialized")
-        except OSError as e:
             s.close()
+            print("(+) Vacuumeter reader initialized")
+            self.inited = True
+        except OSError as e:
             print("(!) Failed to initialize Vacuumeter reader:\t", e)
         
     def return_value(self):
-        data = float()
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.settimeout(2)
-                s.connect((self.ip, self.port))
-                s.send(self.ERSTVAK_command(self.address, 'M'))
-                data = s.recv(1024).decode('ascii')
-                mantissa = int(data[4:8]) / 1000
-                exponent = int(data[8:10]) - 20
-                data = mantissa * 10 ** exponent * 0.75  # torr
-        except:
-            data = 0
+        data = 0 
+
+        if self.inited:
+            try:
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    s.settimeout(2)
+                    s.connect((self.ip, self.port))
+                    s.send(self.ERSTVAK_command(self.address, 'M'))
+                    data = s.recv(1024).decode('ascii')
+                    mantissa = int(data[4:8]) / 1000
+                    exponent = int(data[8:10]) - 20
+                    data = mantissa * 10 ** exponent * 0.75  # torr
+            except:
+                data = 0
 
         return data
 

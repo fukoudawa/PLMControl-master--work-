@@ -15,6 +15,8 @@ import numpy as np
 from os import path
 from concurrent.futures import ThreadPoolExecutor
 from handlers.mqtt_client import MQTTProducer
+import time
+from typing import Callable
 # global poll
 
 def get_available_facilities() -> list:
@@ -59,6 +61,20 @@ def calc_cathode_temp(voltage, current, k):
     else:
         T_K = 0.0
         return T_K
+
+class ReadSignal(QtCore.QObject):
+    finished = QtCore.pyqtSignal(str, float)
+
+class DeviceReader(QtCore.QRunnable):
+    def __init__(self, measurement: str, operation: Callable) -> None:
+        super().__init__()
+        self.measurement = measurement
+        self.operation   = operation
+        self.signals     = ReadSignal()
+
+    @QtCore.pyqtSlot()
+    def run(self) -> None:
+        self.signals.finished.emit(self.measurement, self.operation())
 
 
 class Reader(QtCore.QObject):
@@ -158,7 +174,12 @@ class Reader(QtCore.QObject):
 
             # ----------------------- Publish the data --------------------------------
 
-            self.reader_result.emit(instrument_data, thermocouple_data)
+            try:
+                self.reader_result.emit(instrument_data, thermocouple_data)
+            except Exception as e:
+                pass
+
+            self.client.connect()
 
             for topic, value in instrument_data.items():
                 self.client.publish(value, f"instruments/{topic}")
@@ -166,6 +187,7 @@ class Reader(QtCore.QObject):
             for topic, value in thermocouple_data.items():
                 self.client.publish(value, f"thermocouples/{topic}")
 
+            self.client.disconnect()
 
 class PLMControl(QtWidgets.QMainWindow):
 
@@ -284,30 +306,8 @@ class PLMControl(QtWidgets.QMainWindow):
         self.ui_main.ch14_push.clicked.connect(self.display_ch14)
         self.ui_main.ch15_push.clicked.connect(self.display_ch15)
 
-    def _init_main(self) -> None:
-        self._init_settings()
-        self._init_instruments()
-
-        self.reading_worker = Reader(read_interval=self.read_interval, sample=self.sample,
-                                           discharge=self.discharge, solenoid_1=self.solenoid_1,
-                                           solenoid_2=self.solenoid_2, cathode=self.cathode,
-                                           rrg=self.rrg, pressure_1=self.pressure_1,
-                                           pressure_2=self.pressure_2, pressure_3=self.pressure_3, 
-                                           thermocouple=self.thermocouple, k_value=self.k)
-        
-        self.reading_thread = QtCore.QThread()
-        self.reading_worker.moveToThread(self.reading_thread)
-        self.reading_thread.started.connect(self.reading_worker.run)
-        self.reading_worker.reader_result.connect(self.get_values)
-        self.reading_thread.start()
-
-        self.init_graphs()
-
-        self.x_instruments = [datetime.now().timestamp() - self.thermocouple_array_size + i for i in range(self.thermocouple_array_size)]
-
-        self.display_timer = QtCore.QTimer()
-        self.display_timer.timeout.connect(self.display_values)
-        self.display_timer.start(int(self.read_interval * 1000))
+    def __del__(self):
+        self.reading_thread.terminate()
 
     def _init_ui(self):
         self.ui_main = test_ui.Ui_MainWindow()
