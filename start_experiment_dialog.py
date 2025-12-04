@@ -12,7 +12,7 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 
 
 class Ui_Dialog(object):
-    def setupUi(self, Dialog):
+    def setupUi(self, Dialog, available_facilities: list):
         Dialog.setObjectName("Dialog")
         Dialog.resize(448, 414)
         self.verticalLayout = QtWidgets.QVBoxLayout(Dialog)
@@ -108,8 +108,9 @@ class Ui_Dialog(object):
         self.project = QtWidgets.QLineEdit(self.layoutWidget_2)
         self.project.setObjectName("project")
         self.gridLayout_12.addWidget(self.project, 0, 1, 1, 1)
-        self.facility = QtWidgets.QLineEdit(self.layoutWidget_2)
+        self.facility = QtWidgets.QComboBox(self.layoutWidget_2)
         self.facility.setObjectName("facility")
+        self.facility.addItems(available_facilities)
         self.gridLayout_12.addWidget(self.facility, 1, 1, 1, 1)
         self.sample = QtWidgets.QLineEdit(self.layoutWidget_2)
         self.sample.setObjectName("sample")

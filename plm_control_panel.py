@@ -17,6 +17,9 @@ from concurrent.futures import ThreadPoolExecutor
 from handlers.mqtt_client import MQTTProducer
 # global poll
 
+def get_available_facilities() -> list:
+    """ Получить список доступных установок """
+    return json.load(open("config_paths.json", encoding = "utf-8")).keys()
 
 def create_plot(canvas, graph_size, name, pen):
     # Создаёт график, передаём PlotItem, количество точек на графике, название графика в легенде и цвет
@@ -168,16 +171,25 @@ class PLMControl(QtWidgets.QMainWindow):
 
     def __init__(self):
         QtWidgets.QMainWindow.__init__(self)
+
         self._init_ui()
-        self._init_settings()
-        self._init_instruments()
+        self._init_writing_routine()
+        self._init_ch_flags()
+        self._init_instrument_ui()
+
+        # Последующая инициализация всех устройств происходит в
+        # self._init_main(), вызываемой после закрытия начального окна    
+
+    def _init_writing_routine(self) -> None:
         self.currentTime = QtCore.QTime(00, 00, 00)
         self.timeFormat = '0'
         self.experiment_timer = QtCore.QTimer()
         self.experiment_timer.timeout.connect(self.set_experiment_timer)
         self.writing_routine = QtCore.QTimer()
         self.writing_routine.timeout.connect(self.set_writing_routine)
+        self.timestamp_experimental = 0.0
 
+    def _init_ch_flags(self) -> None:
         self.ch0_flag = False
         self.ch1_flag = False
         self.ch2_flag = False
@@ -195,34 +207,7 @@ class PLMControl(QtWidgets.QMainWindow):
         self.ch14_flag = False
         self.ch15_flag = False
 
-        self.timestamp_experimental = 0.0
-
-        self.reading_worker = Reader(read_interval=self.read_interval, sample=self.sample,
-                                           discharge=self.discharge, solenoid_1=self.solenoid_1,
-                                           solenoid_2=self.solenoid_2, cathode=self.cathode,
-                                           rrg=self.rrg, pressure_1=self.pressure_1,
-                                           pressure_2=self.pressure_2, pressure_3=self.pressure_3, 
-                                           thermocouple=self.thermocouple, k_value=self.k,
-                                           mqtt_configs=self.mqtt_configs)
-        
-        self.reading_thread = QtCore.QThread()
-        self.reading_worker.moveToThread(self.reading_thread)
-        self.reading_thread.started.connect(self.reading_worker.run)
-        self.reading_worker.reader_result.connect(self.get_values)
-        self.reading_thread.start()
-
-        self.init_graphs()
-
-        self.x_instruments = [datetime.now().timestamp() - self.thermocouple_array_size + i for i in range(self.thermocouple_array_size)]
-
-        self.ui_main.check_remote_solenoid_2.setDisabled(True)
-
-        self.display_timer = QtCore.QTimer()
-        self.display_timer.timeout.connect(self.display_values)
-        self.display_timer.start(int(self.read_interval * 1000))
-
-        
-
+    def _init_instrument_ui(self) -> None:
         self.ui_start.OK_button.clicked.connect(self.start_main_window)
         self.ui_main.push_record.clicked.connect(self.start_experiment)
         self.ui_main.push_stopRecord.clicked.connect(self.stop_experiment)
@@ -257,6 +242,7 @@ class PLMControl(QtWidgets.QMainWindow):
         self.ui_main.set_i_solenoid_slider_1.sliderReleased.connect(self.set_i_solenoid_slider_1)
 
         self.ui_main.check_local_solenoid_2.stateChanged.connect(self.solenoid_2_local)
+        self.ui_main.check_remote_solenoid_2.setDisabled(True)
         self.ui_main.check_remote_solenoid_2.stateChanged.connect(self.solenoid_2_remote)
         self.ui_main.solenoid_start_2.stateChanged.connect(self.solenoid_2_remote_start)
         self.ui_main.solenoid_stop_2.stateChanged.connect(self.solenoid_2_remote_stop)
@@ -298,6 +284,31 @@ class PLMControl(QtWidgets.QMainWindow):
         self.ui_main.ch14_push.clicked.connect(self.display_ch14)
         self.ui_main.ch15_push.clicked.connect(self.display_ch15)
 
+    def _init_main(self) -> None:
+        self._init_settings()
+        self._init_instruments()
+
+        self.reading_worker = Reader(read_interval=self.read_interval, sample=self.sample,
+                                           discharge=self.discharge, solenoid_1=self.solenoid_1,
+                                           solenoid_2=self.solenoid_2, cathode=self.cathode,
+                                           rrg=self.rrg, pressure_1=self.pressure_1,
+                                           pressure_2=self.pressure_2, pressure_3=self.pressure_3, 
+                                           thermocouple=self.thermocouple, k_value=self.k)
+        
+        self.reading_thread = QtCore.QThread()
+        self.reading_worker.moveToThread(self.reading_thread)
+        self.reading_thread.started.connect(self.reading_worker.run)
+        self.reading_worker.reader_result.connect(self.get_values)
+        self.reading_thread.start()
+
+        self.init_graphs()
+
+        self.x_instruments = [datetime.now().timestamp() - self.thermocouple_array_size + i for i in range(self.thermocouple_array_size)]
+
+        self.display_timer = QtCore.QTimer()
+        self.display_timer.timeout.connect(self.display_values)
+        self.display_timer.start(int(self.read_interval * 1000))
+
     def _init_ui(self):
         self.ui_main = test_ui.Ui_MainWindow()
         self.ui_mainwindow = QtWidgets.QMainWindow()
@@ -305,7 +316,7 @@ class PLMControl(QtWidgets.QMainWindow):
 
         self.ui_start = start_experiment_dialog.Ui_Dialog()
         self.ui_start_dialog = QtWidgets.QDialog()
-        self.ui_start.setupUi(self.ui_start_dialog)
+        self.ui_start.setupUi(self.ui_start_dialog, get_available_facilities())
 
     def setup_graph(self, canvas):
         canvas.setAxisItems({'bottom': pyqtgraph.DateAxisItem()})
@@ -313,6 +324,9 @@ class PLMControl(QtWidgets.QMainWindow):
         canvas.addLegend()
 
     def start_main_window(self):
+        self.ui_start_dialog.close()
+        self._init_main()
+
         path = self.config['Path_to_write']
         try:
             os.mkdir(path)
@@ -326,7 +340,7 @@ class PLMControl(QtWidgets.QMainWindow):
         info = Info(
                     date=QtCore.QDateTime.currentDateTime().toString('dd.MM.yyyy'),
                     project=self.ui_start.project.text(),
-                    facility=self.ui_start.facility.text(),
+                    facility=self.ui_start.facility.currentText(),
                     sample=self.ui_start.sample.text(),
                     description=self.ui_start.description.toPlainText(),
                     spectroscopy=self.ui_start.spectroscopy.isChecked(),
@@ -335,7 +349,6 @@ class PLMControl(QtWidgets.QMainWindow):
                     )
         self.session.add(info)
         self.session.commit()
-        self.ui_start_dialog.close()
         self.ui_mainwindow.show()
 
     def create_database(self, name, path):
@@ -426,12 +439,25 @@ class PLMControl(QtWidgets.QMainWindow):
         self.pressure_2_plt = create_plot(pressure_1, self.graph_size, name='P2, Торр', pen=5)
         self.pressure_3_plt = create_plot(pressure_1, self.graph_size, name='P3, Торр', pen=7)
 
-    def _init_settings(self):
-        config_path = 'config_main.json'
-        with open(config_path) as config_json:
-            self.config = json.load(config_json)
+    def _get_configs(self) -> dict:
+        """ Получить конфигурационные данные, выбранной установки """
 
-        self.mqtt_configs = self.config["mqtt"]
+        # Считывание доступных установок и путей к конфигурационным файлам, принадлежащим им
+        with open("config_paths.json", encoding = "utf-8") as file:
+            config_paths = json.load(file)
+ 
+        # Вычленение конфигурационных данных установки, выбранной в поле "Установка" стартового окна
+        try:
+            choosen_facility = self.ui_start.facility.currentText()
+            path = config_paths[choosen_facility]
+            print(f"Configuration for the '{choosen_facility}' facility")
+            return json.load(open(path))
+        except Exception as error:
+            print(f"[!] Failed to choose the configuration file: {error}")
+            return {}
+
+    def _init_settings(self):
+        self.config = self._get_configs()
 
         self.read_interval = float(self.config['Read_interval'])
         self.write_interval = float(self.config['Write_interval'])
