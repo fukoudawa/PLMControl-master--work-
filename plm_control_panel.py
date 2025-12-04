@@ -62,21 +62,6 @@ def calc_cathode_temp(voltage, current, k):
         T_K = 0.0
         return T_K
 
-class ReadSignal(QtCore.QObject):
-    finished = QtCore.pyqtSignal(str, float)
-
-class DeviceReader(QtCore.QRunnable):
-    def __init__(self, measurement: str, operation: Callable) -> None:
-        super().__init__()
-        self.measurement = measurement
-        self.operation   = operation
-        self.signals     = ReadSignal()
-
-    @QtCore.pyqtSlot()
-    def run(self) -> None:
-        self.signals.finished.emit(self.measurement, self.operation())
-
-
 class Reader(QtCore.QObject):
     reader_result = QtCore.pyqtSignal(dict, dict)
 
@@ -201,6 +186,33 @@ class PLMControl(QtWidgets.QMainWindow):
 
         # Последующая инициализация всех устройств происходит в
         # self._init_main(), вызываемой после закрытия начального окна    
+
+    def _init_main(self) -> None:
+        self._init_settings()
+        self._init_instruments()
+
+        self.reading_worker = Reader(read_interval=self.read_interval, sample=self.sample,
+                                           discharge=self.discharge, solenoid_1=self.solenoid_1,
+                                           solenoid_2=self.solenoid_2, cathode=self.cathode,
+                                           rrg=self.rrg, pressure_1=self.pressure_1,
+                                           pressure_2=self.pressure_2, pressure_3=self.pressure_3, 
+                                           thermocouple=self.thermocouple, k_value=self.k, 
+                                           mqtt_configs=self.mqtt_configs)
+        
+        self.reading_thread = QtCore.QThread()
+        self.reading_worker.moveToThread(self.reading_thread)
+        self.reading_thread.started.connect(self.reading_worker.run)
+        self.reading_worker.reader_result.connect(self.get_values)
+        self.reading_thread.start()
+
+        self.init_graphs()
+
+        self.x_instruments = [datetime.now().timestamp() - self.thermocouple_array_size + i for i in range(self.thermocouple_array_size)]
+
+        self.display_timer = QtCore.QTimer()
+        self.display_timer.timeout.connect(self.display_values)
+        self.display_timer.start(int(self.read_interval * 1000))
+
 
     def _init_writing_routine(self) -> None:
         self.currentTime = QtCore.QTime(00, 00, 00)
@@ -458,6 +470,8 @@ class PLMControl(QtWidgets.QMainWindow):
 
     def _init_settings(self):
         self.config = self._get_configs()
+        
+        self.mqtt_configs = self.config["mqtt"] if "mqtt" in self.config else {}
 
         self.read_interval = float(self.config['Read_interval'])
         self.write_interval = float(self.config['Write_interval'])

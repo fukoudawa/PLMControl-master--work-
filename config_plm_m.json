@@ -5,6 +5,13 @@
     "k_value": "165.0",
     "Graph_size": "1000",
     "Path_to_write": "../Test",
+
+    "mqtt": {
+        "broker": "127.0.0.1",
+        "port": 1883,
+        "id": "plm_m"
+    },
+
     "sample_properties": [
         {
             "Voltage_limit": "100",
