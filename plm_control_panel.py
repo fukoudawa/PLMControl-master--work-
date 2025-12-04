@@ -178,7 +178,6 @@ class PLMControl(QtWidgets.QMainWindow):
 
     def __init__(self):
         QtWidgets.QMainWindow.__init__(self)
-
         self._init_ui()
         self._init_writing_routine()
         self._init_ch_flags()
@@ -242,6 +241,8 @@ class PLMControl(QtWidgets.QMainWindow):
         self.ch15_flag = False
 
     def _init_instrument_ui(self) -> None:
+        self.init_graphs()
+        self.display_values()
         self.ui_start.OK_button.clicked.connect(self.start_main_window)
         self.ui_main.push_record.clicked.connect(self.start_experiment)
         self.ui_main.push_stopRecord.clicked.connect(self.stop_experiment)
@@ -330,14 +331,16 @@ class PLMControl(QtWidgets.QMainWindow):
         self.ui_start_dialog = QtWidgets.QDialog()
         self.ui_start.setupUi(self.ui_start_dialog, get_available_facilities())
 
-    def setup_graph(self, canvas):
-        canvas.setAxisItems({'bottom': pyqtgraph.DateAxisItem()})
-        canvas.showGrid(x=True, y=True)
-        canvas.addLegend()
+    def setup_graph(self, canvas: pyqtgraph.GraphicsLayoutWidget):
+        # canvas.setAxisItems({'bottom': pyqtgraph.DateAxisItem()})
+        # canvas.showGrid(x=True, y=True)
+        # canvas.addLegend()
+        pass
 
     def start_main_window(self):
         self.ui_start_dialog.close()
-        self._init_main()
+        self._init_settings()
+        self._init_instruments()
 
         path = self.config['Path_to_write']
         try:
@@ -404,8 +407,8 @@ class PLMControl(QtWidgets.QMainWindow):
         # self.setup_graph(self.ui_main.sample_graph)
         # self.setup_graph(self.ui_main.discharge_graph)
         # self.setup_graph(self.ui_main.cathode_graph)
-        self.setup_graph(self.ui_main.thermocouples_graph)
-        self.setup_graph(self.ui_main.thermocouples_graph_full)
+        # self.setup_graph(self.ui_main.thermocouples_graph)
+        # self.setup_graph(self.ui_main.thermocouples_graph_full)
         # self.setup_graph(self.ui_main.pressure_graph)
 
         sample_i = self.ui_main.sample_graph.addPlot(row=0, col=0)
@@ -440,12 +443,12 @@ class PLMControl(QtWidgets.QMainWindow):
 
         gas_flow = self.ui_main.pressure_graph.addPlot(row=0, col=0)
         pressure_1 = self.ui_main.pressure_graph.addPlot(row=1, col=0)
-        #ressure_2 = self.ui_main.pressure_graph.addPlot(row=2, col=0)
-        #pressure_3 = self.ui_main.pressure_graph.addPlot(row=3, col=0)
+        pressure_2 = self.ui_main.pressure_graph.addPlot(row=2, col=0)
+        pressure_3 = self.ui_main.pressure_graph.addPlot(row=3, col=0)
         self.setup_graph(gas_flow)
         self.setup_graph(pressure_1)
-        #self.setup_graph(pressure_2)
-        #self.setup_graph(pressure_3)
+        self.setup_graph(pressure_2)
+        self.setup_graph(pressure_3)
         self.gas_flow_plt = create_plot(gas_flow, self.graph_size, name='G, %', pen=1)
         self.pressure_1_plt = create_plot(pressure_1, self.graph_size, name='P1, Торр', pen=2)
         self.pressure_2_plt = create_plot(pressure_1, self.graph_size, name='P2, Торр', pen=5)
@@ -481,27 +484,18 @@ class PLMControl(QtWidgets.QMainWindow):
 
         self.sample_ip = self.config['sample_properties'][0]['IP']
         self.sample_connect = self.config['sample_properties'][0]['connection_type']
-        #self.sample_mqtt = self.config['sample_properties'][0]['mqtt']
         
         self.discharge_ip = self.config['discharge_properties'][0]['IP']
         self.discharge_connect = self.config['discharge_properties'][0]['connection_type']
-        #self.discharge_mqtt = self.config['discharge_properties'][0]['mqtt']
         
         self.solenoid_ip = self.config['solenoid_properties'][0]['IP']
         self.solenoid_connect = self.config['solenoid_properties'][0]['connection_type']
-        #self.solenoid_mqtt = self.config['solenoid_properties'][0]['mqtt']
         
         self.solenoid_ip_2 = self.config['solenoid_properties'][1]['IP']
         self.solenoid_connect_2 = self.config['solenoid_properties'][1]['connection_type']
-        #self.solenoid_2_mqtt = self.config['solenoid_properties'][1]['mqtt']
-        
-        self.solenoid_ip_3 = self.config['solenoid_properties'][2]['IP']
-        self.solenoid_connect_3 = self.config['solenoid_properties'][2]['connection_type']
-        #self.solenoid_3_mqtt = self.config['solenoid_properties'][2]['mqtt']
         
         self.cathode_ip = self.config['cathode_properties'][0]['IP']
         self.cathode_connect = self.config['cathode_properties'][0]['connection_type']
-        #self.cathode_mqtt = self.config['cathode_properties'][0]['mqtt']
 
         self.thermocouple_path = self.config['Thermocouple'][0]['Path']
         self.thermocouple_array_size = int(self.config['Thermocouple'][0]['Array_size'])
@@ -512,22 +506,18 @@ class PLMControl(QtWidgets.QMainWindow):
         self.rrg_port = self.config['RRG_connection'][0]['COM_port']
         self.rrg_baudrate = int(self.config['RRG_connection'][0]['Baudrate'])
         self.rrg_address = int(self.config['RRG_connection'][0]['Address'])
-        #self.rrg_mqtt = self.config['RRG_connection'][0]['mqtt']
 
         self.pressure_1_ip = self.config['Pressure1'][0]['ip']
         self.pressure_1_port = int(self.config['Pressure1'][0]['port'])
         self.pressure_1_address = int(self.config['Pressure1'][0]['address'])
-        #self.pressure_1_mqtt = self.config['Pressure1'][0]['mqtt']
         
         self.pressure_2_ip = self.config['Pressure2'][0]['ip']
         self.pressure_2_port = int(self.config['Pressure2'][0]['port'])
         self.pressure_2_address = int(self.config['Pressure2'][0]['address'])
-        #self.pressure_2_mqtt = self.config['Pressure2'][0]['mqtt']
         
         self.pressure_3_ip = self.config['Pressure3'][0]['ip']
         self.pressure_3_port = int(self.config['Pressure3'][0]['port'])
         self.pressure_3_address = int(self.config['Pressure3'][0]['address'])
-        #self.pressure_3_mqtt = self.config['Pressure3'][0]['mqtt']
 
         self.ui_main.set_u_sample.setMinimum(-int(self.config['sample_properties'][0]['Voltage_limit']))
         self.ui_main.set_u_sample.setMaximum(int(self.config['sample_properties'][0]['Voltage_limit']))
@@ -569,16 +559,6 @@ class PLMControl(QtWidgets.QMainWindow):
         self.ui_main.set_p_solenoid_slider_2.setMaximum(int(self.config['solenoid_properties'][1]['Power_limit']))
         self.ui_main.set_p_solenoid_slider_2.setInterval(0.01)
 
-        # self.ui_main.set_u_solenoid_3.setMaximum(int(self.config['solenoid_properties'][2]['Voltage_limit']))
-        # self.ui_main.set_u_solenoid_slider_3.setMaximum(int(self.config['solenoid_properties'][2]['Voltage_limit']))
-        # self.ui_main.set_u_solenoid_slider_3.setInterval(0.01)
-        # self.ui_main.set_i_solenoid_3.setMaximum(int(self.config['solenoid_properties'][2]['Current_limit']))
-        # self.ui_main.set_i_solenoid_slider_3.setMaximum(int(self.config['solenoid_properties'][2]['Current_limit']))
-        # self.ui_main.set_i_solenoid_slider_3.setInterval(0.01)
-        # self.ui_main.set_p_solenoid_3.setMaximum(int(self.config['solenoid_properties'][2]['Power_limit']))
-        # self.ui_main.set_p_solenoid_slider_3.setMaximum(int(self.config['solenoid_properties'][2]['Power_limit']))
-        # self.ui_main.set_p_solenoid_slider_3.setInterval(0.01)
-
         self.ui_main.set_u_cathode.setMaximum(int(self.config['cathode_properties'][0]['Voltage_limit']))
         self.ui_main.set_u_cathode_slider.setMaximum(int(self.config['cathode_properties'][0]['Voltage_limit']))
         self.ui_main.set_u_cathode_slider.setInterval(0.01)
@@ -612,10 +592,6 @@ class PLMControl(QtWidgets.QMainWindow):
         self.solenoid_2 = SCPIInstrument(self.rm, self.solenoid_connect_2, self.solenoid_ip_2, 0, name='Solenoid 2')
         if not self.solenoid_2.isInitialized:
             self.ui_main.check_remote_solenoid_2.setDisabled(True)
-
-        # self.solenoid_3 = SCPIInstrument(self.rm, self.solenoid_connect_3, self.solenoid_ip_3, 0, name='Solenoid 3')
-        # if not self.solenoid_3.isInitialized:
-        #     self.ui_main.check_remote_solenoid_3.setDisabled(True)
 
         self.cathode = SCPIInstrument(self.rm, self.cathode_connect, self.cathode_ip, 0, name='Cathode')
         if not self.cathode.isInitialized:

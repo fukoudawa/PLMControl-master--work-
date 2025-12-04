@@ -161,7 +161,7 @@ class RRGInstrument:
 
     def _get_holding_registers(self):
         try:
-            rr = self.client.read_holding_registers(0, 7, self.unit) 
+            rr = self.client.read_holding_registers(address=0, count=7, device_id=self.unit) 
             self.holding_registers = rr.registers  # list of ints
             self.flag_1 = bin(self.holding_registers[2])  # binary string
             self.flag_1 = self.flag_1[::-1]  # reversed binary string
@@ -237,7 +237,7 @@ class RRGInstrument:
     def set_flow(self, value: int):
         try:
             value_to_rrg = value * 100
-            self.client.write_register(4, value_to_rrg, self.unit) 
+            self.client.write_register(address=4, value=value_to_rrg, device_id=self.unit) 
             self._get_holding_registers()
             return self.holding_registers[4]
         except Exception:

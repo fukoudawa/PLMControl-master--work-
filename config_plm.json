@@ -4,28 +4,26 @@
     "Journal_auto_update": "600",
     "k_value": "165.0",
     "Graph_size": "1000",
-    "Path_to_write": "../Test",
-
+    "Path_to_write": "./Data",
     "mqtt": {
         "broker": "127.0.0.1",
         "port": 1883,
         "id": "plm_m"
     },
-    
     "sample_properties": [
         {
             "Voltage_limit": "100",
             "Current_limit": "4",
-            "IP": "192.168.0.201",
+            "IP": "192.168.10.14",
             "connection_type": "SOCKET"
         }
     ],
     "discharge_properties": [
         {
             "Voltage_limit": "200",
-            "Current_limit": "50",
-            "Power_limit": "5000",
-            "IP": "192.168.0.202",
+            "Current_limit": "30",
+            "Power_limit": "3000",
+            "IP": "192.168.10.11",
             "connection_type": "TCPIP"
         }
     ],
@@ -42,13 +40,6 @@
             "Power_limit": "2000",
             "IP": "192.168.0.206",
             "connection_type": "TCPIP"
-        },
-        {
-            "Voltage_limit": "10",
-            "Current_limit": "200",
-            "Power_limit": "2000",
-            "IP": "192.168.0.207",
-            "connection_type": "TCPIP"
         }
     ],
     "cathode_properties": [
@@ -56,7 +47,7 @@
             "Voltage_limit": "60",
             "Current_limit": "80",
             "Power_limit": "3000",
-            "IP": "192.168.0.204",
+            "IP": "192.168.10.12",
             "connection_type": "TCPIP"
         }
     ],
@@ -78,22 +69,22 @@
     ],
     "Pressure1": [
         {
-		"ip": "192.168.0.32",
+		"ip": "192.168.10.13",
     		"port": "501",
     		"address": "1"
         }
     ],
     "Pressure2": [
         {
-		"ip": "192.168.0.32",
-    		"port": "502",
+		"ip": "192.168.10.13",
+    		"port": "501",
     		"address": "2"
         }
     ],
     "Pressure3": [
         {
-		    "ip": "192.168.0.32",
-    		"port": "503",
+		    "ip": "192.168.10.13",
+    		"port": "501",
     		"address": "3"
         }
     ]
