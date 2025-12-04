@@ -178,6 +178,7 @@ class PLMControl(QtWidgets.QMainWindow):
 
     def __init__(self):
         QtWidgets.QMainWindow.__init__(self)
+        
         self._init_ui()
         self._init_writing_routine()
         self._init_ch_flags()
@@ -185,33 +186,6 @@ class PLMControl(QtWidgets.QMainWindow):
 
         # Последующая инициализация всех устройств происходит в
         # self._init_main(), вызываемой после закрытия начального окна    
-
-    def _init_main(self) -> None:
-        self._init_settings()
-        self._init_instruments()
-
-        self.reading_worker = Reader(read_interval=self.read_interval, sample=self.sample,
-                                           discharge=self.discharge, solenoid_1=self.solenoid_1,
-                                           solenoid_2=self.solenoid_2, cathode=self.cathode,
-                                           rrg=self.rrg, pressure_1=self.pressure_1,
-                                           pressure_2=self.pressure_2, pressure_3=self.pressure_3, 
-                                           thermocouple=self.thermocouple, k_value=self.k, 
-                                           mqtt_configs=self.mqtt_configs)
-        
-        self.reading_thread = QtCore.QThread()
-        self.reading_worker.moveToThread(self.reading_thread)
-        self.reading_thread.started.connect(self.reading_worker.run)
-        self.reading_worker.reader_result.connect(self.get_values)
-        self.reading_thread.start()
-
-        self.init_graphs()
-
-        self.x_instruments = [datetime.now().timestamp() - self.thermocouple_array_size + i for i in range(self.thermocouple_array_size)]
-
-        self.display_timer = QtCore.QTimer()
-        self.display_timer.timeout.connect(self.display_values)
-        self.display_timer.start(int(self.read_interval * 1000))
-
 
     def _init_writing_routine(self) -> None:
         self.currentTime = QtCore.QTime(00, 00, 00)
@@ -241,8 +215,8 @@ class PLMControl(QtWidgets.QMainWindow):
         self.ch15_flag = False
 
     def _init_instrument_ui(self) -> None:
-        self.init_graphs()
-        self.display_values()
+        # self.init_graphs()
+        # self.display_values()
         self.ui_start.OK_button.clicked.connect(self.start_main_window)
         self.ui_main.push_record.clicked.connect(self.start_experiment)
         self.ui_main.push_stopRecord.clicked.connect(self.stop_experiment)
@@ -322,6 +296,32 @@ class PLMControl(QtWidgets.QMainWindow):
     def __del__(self):
         self.reading_thread.terminate()
 
+    def _init_main(self) -> None:
+        self._init_settings()
+        self._init_instruments()
+
+        self.reading_worker = Reader(read_interval=self.read_interval, sample=self.sample,
+                                           discharge=self.discharge, solenoid_1=self.solenoid_1,
+                                           solenoid_2=self.solenoid_2, cathode=self.cathode,
+                                           rrg=self.rrg, pressure_1=self.pressure_1,
+                                           pressure_2=self.pressure_2, pressure_3=self.pressure_3, 
+                                           thermocouple=self.thermocouple, k_value=self.k,
+                                           mqtt_configs=self.mqtt_configs)
+        
+        self.reading_thread = QtCore.QThread()
+        self.reading_worker.moveToThread(self.reading_thread)
+        self.reading_thread.started.connect(self.reading_worker.run)
+        self.reading_worker.reader_result.connect(self.get_values)
+        self.reading_thread.start()
+
+        self.init_graphs()
+
+        self.x_instruments = [datetime.now().timestamp() - self.thermocouple_array_size + i for i in range(self.thermocouple_array_size)]
+
+        self.display_timer = QtCore.QTimer()
+        self.display_timer.timeout.connect(self.display_values)
+        self.display_timer.start(int(self.read_interval * 1000))
+
     def _init_ui(self):
         self.ui_main = test_ui.Ui_MainWindow()
         self.ui_mainwindow = QtWidgets.QMainWindow()
@@ -332,15 +332,13 @@ class PLMControl(QtWidgets.QMainWindow):
         self.ui_start.setupUi(self.ui_start_dialog, get_available_facilities())
 
     def setup_graph(self, canvas: pyqtgraph.GraphicsLayoutWidget):
-        # canvas.setAxisItems({'bottom': pyqtgraph.DateAxisItem()})
-        # canvas.showGrid(x=True, y=True)
-        # canvas.addLegend()
-        pass
+        canvas.setAxisItems({'bottom': pyqtgraph.DateAxisItem()})
+        canvas.showGrid(x=True, y=True)
+        canvas.addLegend()
 
     def start_main_window(self):
         self.ui_start_dialog.close()
-        self._init_settings()
-        self._init_instruments()
+        self._init_main()
 
         path = self.config['Path_to_write']
         try:
@@ -443,12 +441,12 @@ class PLMControl(QtWidgets.QMainWindow):
 
         gas_flow = self.ui_main.pressure_graph.addPlot(row=0, col=0)
         pressure_1 = self.ui_main.pressure_graph.addPlot(row=1, col=0)
-        pressure_2 = self.ui_main.pressure_graph.addPlot(row=2, col=0)
-        pressure_3 = self.ui_main.pressure_graph.addPlot(row=3, col=0)
+        # pressure_2 = self.ui_main.pressure_graph.addPlot(row=2, col=0)
+        # pressure_3 = self.ui_main.pressure_graph.addPlot(row=3, col=0)
         self.setup_graph(gas_flow)
         self.setup_graph(pressure_1)
-        self.setup_graph(pressure_2)
-        self.setup_graph(pressure_3)
+        # self.setup_graph(pressure_2)
+        # self.setup_graph(pressure_3)
         self.gas_flow_plt = create_plot(gas_flow, self.graph_size, name='G, %', pen=1)
         self.pressure_1_plt = create_plot(pressure_1, self.graph_size, name='P1, Торр', pen=2)
         self.pressure_2_plt = create_plot(pressure_1, self.graph_size, name='P2, Торр', pen=5)
@@ -473,14 +471,13 @@ class PLMControl(QtWidgets.QMainWindow):
 
     def _init_settings(self):
         self.config = self._get_configs()
-        
-        self.mqtt_configs = self.config["mqtt"] if "mqtt" in self.config else {}
 
         self.read_interval = float(self.config['Read_interval'])
         self.write_interval = float(self.config['Write_interval'])
         self.journal_auto_update = float(self.config['Journal_auto_update'])
         self.k = float(self.config['k_value'])
         self.graph_size = int(self.config['Graph_size'])
+        self.mqtt_configs = self.config["mqtt"] if "mqtt" in self.config else {}
 
         self.sample_ip = self.config['sample_properties'][0]['IP']
         self.sample_connect = self.config['sample_properties'][0]['connection_type']
