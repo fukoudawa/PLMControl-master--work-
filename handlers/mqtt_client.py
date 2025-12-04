@@ -157,6 +157,18 @@ class MQTTProducer:
     def isOnline(self) -> bool: 
         return self.__client.is_connected() if isinstance(self.__client, mqtt_client.Client) else False
 
+    @property
+    def id(self) -> str: 
+        return self.__id
+
+    @property
+    def broker(self) -> str: 
+        return self.__broker
+
+    @property
+    def port(self) -> int: 
+        return self.__port
+
     def configure(self, configs: dict) -> bool:
         """
         Настротить объект MQTTProducer
