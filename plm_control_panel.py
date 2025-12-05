@@ -63,7 +63,7 @@ def calc_cathode_temp(voltage, current, k):
         return T_K
 
 class Reader(QtCore.QObject):
-    reader_result = QtCore.pyqtSignal(dict, dict)
+    reader_result = QtCore.pyqtSignal(dict, dict, float)
 
     def __init__(
         self,
@@ -102,6 +102,8 @@ class Reader(QtCore.QObject):
 
     def run(self) -> None:
         while True:
+            delay = timedelta(seconds=self.read_interval)
+            deadline = datetime.now() + delay 
             instrument_data   = {}
             thermocouple_data = {}
 
@@ -158,9 +160,9 @@ class Reader(QtCore.QObject):
                     thermocouple_data.update({f"CH{i}": 0.0 for i in range(self.thermocouple.thermocouple_ch_end + 1)})   
 
             # ----------------------- Publish the data --------------------------------
-
+            timestamp = datetime.now().timestamp()
             try:
-                self.reader_result.emit(instrument_data, thermocouple_data)
+                self.reader_result.emit(instrument_data, thermocouple_data, timestamp)
             except Exception as e:
                 pass
 
@@ -171,13 +173,21 @@ class Reader(QtCore.QObject):
 
             for topic, value in thermocouple_data.items():
                 self.client.publish(value, f"thermocouples/{topic}")
+            
+            self.client.publish(timestamp, "timestamp")
 
             self.client.disconnect()
+            if datetime.now() < deadline:
+                pass
+            else:
+                print(f"Reader: deadline exceeded by {(datetime.now() - deadline).microseconds * 1e3} ms")
 
 class PLMControl(QtWidgets.QMainWindow):
 
     def __init__(self):
         QtWidgets.QMainWindow.__init__(self)
+
+        self.start_db_writing = False
         
         self._init_ui()
         self._init_writing_routine()
@@ -192,9 +202,6 @@ class PLMControl(QtWidgets.QMainWindow):
         self.timeFormat = '0'
         self.experiment_timer = QtCore.QTimer()
         self.experiment_timer.timeout.connect(self.set_experiment_timer)
-        self.writing_routine = QtCore.QTimer()
-        self.writing_routine.timeout.connect(self.set_writing_routine)
-        self.timestamp_experimental = 0.0
 
     def _init_ch_flags(self) -> None:
         self.ch0_flag = False
@@ -215,8 +222,6 @@ class PLMControl(QtWidgets.QMainWindow):
         self.ch15_flag = False
 
     def _init_instrument_ui(self) -> None:
-        # self.init_graphs()
-        # self.display_values()
         self.ui_start.OK_button.clicked.connect(self.start_main_window)
         self.ui_main.push_record.clicked.connect(self.start_experiment)
         self.ui_main.push_stopRecord.clicked.connect(self.stop_experiment)
@@ -318,10 +323,6 @@ class PLMControl(QtWidgets.QMainWindow):
 
         self.x_instruments = [datetime.now().timestamp() - self.thermocouple_array_size + i for i in range(self.thermocouple_array_size)]
 
-        self.display_timer = QtCore.QTimer()
-        self.display_timer.timeout.connect(self.display_values)
-        self.display_timer.start(int(self.read_interval * 1000))
-
     def _init_ui(self):
         self.ui_main = test_ui.Ui_MainWindow()
         self.ui_mainwindow = QtWidgets.QMainWindow()
@@ -372,34 +373,16 @@ class PLMControl(QtWidgets.QMainWindow):
 
     def start_experiment(self):
         self.experiment_timer.start(1000)
-        self.writing_routine.start(int(self.write_interval * 1000))
+        self.start_db_writing = True
 
     def stop_experiment(self):
         self.experiment_timer.stop()
-        self.writing_routine.stop()
+        self.start_db_writing = False
 
     def set_experiment_timer(self):
         self.currentTime = self.currentTime.addSecs(1)
         self.timeFormat = self.currentTime.toString('hh:mm:ss')
         self.ui_main.set_timer.setText(self.timeFormat)
-
-    def set_writing_routine(self):
-        commit_time = time.localtime()
-        commit_time_timestamp = datetime.now().timestamp()
-        commit_time = time.strftime("%H:%M:%S", commit_time)
-        self.timestamp_experimental = str(self.timestamp_experimental)
-        
-        commit = Instruments(
-            time=commit_time,
-            time_experiment=self.timeFormat,
-            timestamp_abs=str(commit_time_timestamp),
-            timestamp_experimental=self.timestamp_experimental,
-            instruments_values=json.dumps(self.instrument_data),
-            thermocouples_values=json.dumps(self.thermocouple_data)
-        )
-        self.session.add(commit)
-        self.session.commit()
-        self.timestamp_experimental = float(self.timestamp_experimental) + self.write_interval
 
     def init_graphs(self):
         # self.setup_graph(self.ui_main.sample_graph)
@@ -473,7 +456,6 @@ class PLMControl(QtWidgets.QMainWindow):
         self.config = self._get_configs()
 
         self.read_interval = float(self.config['Read_interval'])
-        self.write_interval = float(self.config['Write_interval'])
         self.journal_auto_update = float(self.config['Journal_auto_update'])
         self.k = float(self.config['k_value'])
         self.graph_size = int(self.config['Graph_size'])
@@ -616,30 +598,30 @@ class PLMControl(QtWidgets.QMainWindow):
         self.pressure_3 = VacuumeterERSTEVAK(ip=self.pressure_3_ip, port=self.pressure_3_port,
                                              address=self.pressure_3_address)
 
-    def get_values(self, instrument_value, thermocouple_value):
-        self.instrument_data   = instrument_value
-        self.thermocouple_data = thermocouple_value
+    def get_values(self, instrument_value: dict[str, float], thermocouple_value: dict[str, float], timestamp: float):
+        instruments_data   = instrument_value
+        thermocouples_data = thermocouple_value
+        self.display_values(instruments_data, thermocouples_data, timestamp)
+        self.set_writing_routine(instruments_data, thermocouples_data, timestamp)
 
-    def display_values(self): 
-        value = self.instrument_data
-        sample_voltage = value['sample_voltage']
-        sample_current = value['sample_current']
-        discharge_voltage = value['discharge_voltage']
-        discharge_current = value['discharge_current']
-        discharge_power = value['discharge_power']
-        solenoid_voltage_1 = value['solenoid_voltage_1']
-        solenoid_current_1 = value['solenoid_current_1']
-        solenoid_voltage_2 = value['solenoid_voltage_2']
-        solenoid_current_2 = value['solenoid_current_2']
-        cathode_voltage = value['cathode_voltage']
-        cathode_current = value['cathode_current']
-        cathode_power = value['cathode_power']
-        cathode_temp = value['T_cathode']
-        gas_flow = value['rrg_value']
-        pressure_1 = value['pressure_1']
-        pressure_2 = value['pressure_2']
-        pressure_3 = value['pressure_3']
-        value_thermocouples = self.thermocouple_data
+    def display_values(self, instruments, thermocouples, timestamp):
+        sample_voltage = instruments['sample_voltage']
+        sample_current = instruments['sample_current']
+        discharge_voltage = instruments['discharge_voltage']
+        discharge_current = instruments['discharge_current']
+        discharge_power = instruments['discharge_power']
+        solenoid_voltage_1 = instruments['solenoid_voltage_1']
+        solenoid_current_1 = instruments['solenoid_current_1']
+        solenoid_voltage_2 = instruments['solenoid_voltage_2']
+        solenoid_current_2 = instruments['solenoid_current_2']
+        cathode_voltage = instruments['cathode_voltage']
+        cathode_current = instruments['cathode_current']
+        cathode_power = instruments['cathode_power']
+        cathode_temp = instruments['T_cathode']
+        gas_flow = instruments['rrg_value']
+        pressure_1 = instruments['pressure_1']
+        pressure_2 = instruments['pressure_2']
+        pressure_3 = instruments['pressure_3']
 
         self.ui_main.u_sample_actual.setText(str(sample_voltage))
         self.ui_main.i_sample_actual.setText(str(sample_current))
@@ -715,101 +697,114 @@ class PLMControl(QtWidgets.QMainWindow):
                                                                    gas_flow)
 
         if self.ch0_flag:
-            self.ui_main.ch0.setText(str(value_thermocouples['CH0']))
+            self.ui_main.ch0.setText(str(thermocouples['CH0']))
             [self.ch0_plt[0], self.ch0_plt[1]] = update_plot(self.ch0_plt[0],
                                                              self.ch0_plt[1],
                                                              self.ch0_plt[2],
-                                                             value_thermocouples['CH0'])
+                                                             thermocouples['CH0'])
         if self.ch1_flag:
-            self.ui_main.ch1.setText(str(value_thermocouples['CH1']))
+            self.ui_main.ch1.setText(str(thermocouples['CH1']))
             [self.ch1_plt[0], self.ch1_plt[1]] = update_plot(self.ch1_plt[0],
                                                              self.ch1_plt[1],
                                                              self.ch1_plt[2],
-                                                             value_thermocouples['CH1'])
+                                                             thermocouples['CH1'])
         if self.ch2_flag:
-            self.ui_main.ch2.setText(str(value_thermocouples['CH2']))
+            self.ui_main.ch2.setText(str(thermocouples['CH2']))
             [self.ch2_plt[0], self.ch2_plt[1]] = update_plot(self.ch2_plt[0],
                                                              self.ch2_plt[1],
                                                              self.ch2_plt[2],
-                                                             value_thermocouples['CH2'])
+                                                             thermocouples['CH2'])
         if self.ch3_flag:
-            self.ui_main.ch3.setText(str(value_thermocouples['CH3']))
+            self.ui_main.ch3.setText(str(thermocouples['CH3']))
             [self.ch3_plt[0], self.ch3_plt[1]] = update_plot(self.ch3_plt[0],
                                                              self.ch3_plt[1],
                                                              self.ch3_plt[2],
-                                                             value_thermocouples['CH3'])
+                                                             thermocouples['CH3'])
         if self.ch4_flag:
-            self.ui_main.ch4.setText(str(value_thermocouples['CH4']))
+            self.ui_main.ch4.setText(str(thermocouples['CH4']))
             [self.ch4_plt[0], self.ch4_plt[1]] = update_plot(self.ch4_plt[0],
                                                              self.ch4_plt[1],
                                                              self.ch4_plt[2],
-                                                             value_thermocouples['CH4'])
+                                                             thermocouples['CH4'])
         if self.ch5_flag:
-            self.ui_main.ch5.setText(str(value_thermocouples['CH5']))
+            self.ui_main.ch5.setText(str(thermocouples['CH5']))
             [self.ch5_plt[0], self.ch5_plt[1]] = update_plot(self.ch5_plt[0],
                                                              self.ch5_plt[1],
                                                              self.ch5_plt[2],
-                                                             value_thermocouples['CH5'])
+                                                             thermocouples['CH5'])
         if self.ch6_flag:
-            self.ui_main.ch6.setText(str(value_thermocouples['CH6']))
+            self.ui_main.ch6.setText(str(thermocouples['CH6']))
             [self.ch6_plt[0], self.ch6_plt[1]] = update_plot(self.ch6_plt[0],
                                                              self.ch6_plt[1],
                                                              self.ch6_plt[2],
-                                                             value_thermocouples['CH6'])
+                                                             thermocouples['CH6'])
         if self.ch7_flag:
-            self.ui_main.ch7.setText(str(value_thermocouples['CH7']))
+            self.ui_main.ch7.setText(str(thermocouples['CH7']))
             [self.ch7_plt[0], self.ch7_plt[1]] = update_plot(self.ch7_plt[0],
                                                              self.ch7_plt[1],
                                                              self.ch7_plt[2],
-                                                             value_thermocouples['CH7'])
+                                                             thermocouples['CH7'])
         if self.ch8_flag:
-            self.ui_main.ch8.setText(str(value_thermocouples['CH8']))
+            self.ui_main.ch8.setText(str(thermocouples['CH8']))
             [self.ch8_plt[0], self.ch8_plt[1]] = update_plot(self.ch8_plt[0],
                                                              self.ch8_plt[1],
                                                              self.ch8_plt[2],
-                                                             value_thermocouples['CH8'])
+                                                             thermocouples['CH8'])
         if self.ch9_flag:
-            self.ui_main.ch9.setText(str(value_thermocouples['CH9']))
+            self.ui_main.ch9.setText(str(thermocouples['CH9']))
             [self.ch9_plt[0], self.ch9_plt[1]] = update_plot(self.ch9_plt[0],
                                                              self.ch9_plt[1],
                                                              self.ch9_plt[2],
-                                                             value_thermocouples['CH9'])
+                                                             thermocouples['CH9'])
         if self.ch10_flag:
-            self.ui_main.ch10.setText(str(value_thermocouples['CH10']))
+            self.ui_main.ch10.setText(str(thermocouples['CH10']))
             [self.ch10_plt[0], self.ch10_plt[1]] = update_plot(self.ch10_plt[0],
                                                                self.ch10_plt[1],
                                                                self.ch10_plt[2],
-                                                               value_thermocouples['CH10'])
+                                                               thermocouples['CH10'])
         if self.ch11_flag:
-            self.ui_main.ch11.setText(str(value_thermocouples['CH11']))
+            self.ui_main.ch11.setText(str(thermocouples['CH11']))
             [self.ch11_plt[0], self.ch11_plt[1]] = update_plot(self.ch11_plt[0],
                                                                self.ch11_plt[1],
                                                                self.ch11_plt[2],
-                                                               value_thermocouples['CH11'])
+                                                               thermocouples['CH11'])
         if self.ch12_flag:
-            self.ui_main.ch12.setText(str(value_thermocouples['CH12']))
+            self.ui_main.ch12.setText(str(thermocouples['CH12']))
             [self.ch12_plt[0], self.ch12_plt[1]] = update_plot(self.ch12_plt[0],
                                                                self.ch12_plt[1],
                                                                self.ch12_plt[2],
-                                                               value_thermocouples['CH12'])
+                                                               thermocouples['CH12'])
         if self.ch13_flag:
-            self.ui_main.ch13.setText(str(value_thermocouples['CH13']))
+            self.ui_main.ch13.setText(str(thermocouples['CH13']))
             [self.ch13_plt[0], self.ch13_plt[1]] = update_plot(self.ch13_plt[0],
                                                                self.ch13_plt[1],
                                                                self.ch13_plt[2],
-                                                               value_thermocouples['CH13'])
+                                                               thermocouples['CH13'])
         if self.ch14_flag:
-            self.ui_main.ch14.setText(str(value_thermocouples['CH14']))
+            self.ui_main.ch14.setText(str(thermocouples['CH14']))
             [self.ch14_plt[0], self.ch14_plt[1]] = update_plot(self.ch14_plt[0],
                                                                self.ch14_plt[1],
                                                                self.ch14_plt[2],
-                                                               value_thermocouples['CH14'])
+                                                               thermocouples['CH14'])
         if self.ch15_flag:
-            self.ui_main.ch15.setText(str(value_thermocouples['CH15']))
+            self.ui_main.ch15.setText(str(thermocouples['CH15']))
             [self.ch15_plt[0], self.ch15_plt[1]] = update_plot(self.ch15_plt[0],
                                                                self.ch15_plt[1],
                                                                self.ch15_plt[2],
-                                                               value_thermocouples['CH15'])
+                                                               thermocouples['CH15'])
+
+    def set_writing_routine(self, instruments: dict, thermocouples: dict, timestamp: float):
+        if self.start_db_writing:
+            commit = Instruments(
+                time=None,
+                time_experiment=None,
+                timestamp_abs=str(timestamp),
+                timestamp_experimental=None,
+                instruments_values=json.dumps(instruments),
+                thermocouples_values=json.dumps(thermocouples)
+            )
+            self.session.add(commit)
+            self.session.commit()
 
     def display_ch0(self):
         if not self.ch0_flag:
@@ -1330,11 +1325,3 @@ class PLMControl(QtWidgets.QMainWindow):
         if state == 2:
             self.ui_main.set_rrg.setDisabled(False)
             self.ui_main.set_rrg_slider.setDisabled(False)
-
-
-if __name__ == '__main__':
-    import sys
-    app = QtWidgets.QApplication(sys.argv)
-    plm_control = PLMControl()
-    plm_control.ui_start_dialog.show()
-    sys.exit(app.exec_())

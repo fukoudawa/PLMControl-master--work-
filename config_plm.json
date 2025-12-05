@@ -1,6 +1,5 @@
 {
     "Read_interval": "1",
-    "Write_interval": "1",
     "Journal_auto_update": "600",
     "k_value": "165.0",
     "Graph_size": "1000",
