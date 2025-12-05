@@ -19,6 +19,39 @@ import time
 from typing import Callable
 # global poll
 
+class Plot:
+    def __init__(self, canvas: pyqtgraph.GraphicsLayoutWidget, index: int, legend: str, graph_size: int, curve_number:int=1):
+        self._curve_number = curve_number
+        self._time_axis = np.zeros(shape=graph_size)
+        self._data = list()
+        self._curves = list()
+        for i in range(curve_number):
+            self._data.append(np.zeros(shape=graph_size))
+        self.plot_view = canvas.addPlot(row=index, col=0)
+        self.plot_view.setAxisItems({'bottom': pyqtgraph.DateAxisItem()})
+        self.plot_view.showGrid(True, True)
+        if curve_number == 1:
+            self._curves.append(self.plot_view.plot(self._time_axis, self._data[0], pen=pyqtgraph.mkPen(color=pyqtgraph.intColor(index+i)), name=legend))
+            self.plot_view.addLegend()
+        else:
+            for i in range(curve_number):
+                self._curves.append(self.plot_view.plot(self._time_axis, self._data[i], pen=pyqtgraph.mkPen(color=pyqtgraph.intColor(index+i)), name=f"{legend}{i}"))
+            self.plot_view.addLegend()
+
+    def update(self, timestamp, value):
+        _x = np.delete(self._time_axis, 0)
+        self._time_axis = np.append(_x, timestamp)
+        if isinstance(value, list):
+            for i in range(self._curve_number):
+                _y = np.delete(self._data[i], 0)
+                self._data[i] = np.append(_y, value)
+                self._curves[i].setData(self._time_axis, self._data[i])
+        else:
+            _y = np.delete(self._data[0], 0)
+            self._data[0] = np.append(_y, value)
+            self._curves[0].setData(self._time_axis, self._data[0])
+
+
 def get_available_facilities() -> list:
     """ Получить список доступных установок """
     return json.load(open("config_paths.json", encoding = "utf-8")).keys()
@@ -61,6 +94,7 @@ def calc_cathode_temp(voltage, current, k):
     else:
         T_K = 0.0
         return T_K
+
 
 class Reader(QtCore.QObject):
     reader_result = QtCore.pyqtSignal(dict, dict, float)
@@ -296,10 +330,10 @@ class PLMControl(QtWidgets.QMainWindow):
         self.ui_start_dialog = QtWidgets.QDialog()
         self.ui_start.setupUi(self.ui_start_dialog)
 
-    def setup_graph(self, canvas: pyqtgraph.GraphicsLayoutWidget):
-        canvas.setAxisItems({'bottom': pyqtgraph.DateAxisItem()})
-        canvas.showGrid(x=True, y=True)
-        canvas.addLegend()
+    # def setup_graph(self, canvas: pyqtgraph.GraphicsLayoutWidget):
+    #     canvas.setAxisItems({'bottom': pyqtgraph.DateAxisItem()})
+    #     canvas.showGrid(x=True, y=True)
+    #     canvas.addLegend()
 
     def start_main_window(self):
         self.ui_start_dialog.close()
@@ -348,8 +382,48 @@ class PLMControl(QtWidgets.QMainWindow):
         self.currentTime = self.currentTime.addSecs(1)
         self.timeFormat = self.currentTime.toString('hh:mm:ss')
         self.ui_main.set_timer.setText(self.timeFormat)
+    
+    def _setup_graph(self, canvas: pyqtgraph.GraphicsLayoutWidget, row: int, col: int) -> pyqtgraph.PlotItem:
+        plot: pyqtgraph.PlotItem = canvas.addPlot(row=row, col=col)
+        plot.setAxisItems({'bottom': pyqtgraph.DateAxisItem()})
+        plot.showGrid(True, True)
+        return plot
 
     def init_graphs(self):
+        # self.plots = {
+        #     "sample_voltage": self._setup_graph(self.ui_main.sample_graph, 0, 0),
+        #     "sample_current": self._setup_graph(self.ui_main.sample_graph, 1, 0),
+        #     "discharge_voltage": self._setup_graph(self.ui_main.discharge_graph, 0, 0),
+        #     "discharge_current": self._setup_graph(self.ui_main.discharge_graph, 1, 0),
+        #     "discharge_power": self._setup_graph(self.ui_main.discharge_graph, 2, 0),
+        #     "cathode_voltage": self._setup_graph(self.ui_main.cathode_graph, 0, 0),
+        #     "cathode_current": self._setup_graph(self.ui_main.cathode_graph, 1, 0),
+        #     "cathode_power": self._setup_graph(self.ui_main.cathode_graph, 2, 0),
+        #     "T_cathode": self._setup_graph(self.ui_main.cathode_graph, 3, 0),
+        #     "rrg_value": self._setup_graph(self.ui_main.pressure_graph, 0, 0),
+        #     "pressure_1": self._setup_graph(self.ui_main.pressure_graph, 1, 0),
+        #     "pressure_2": self._setup_graph(self.ui_main.pressure_graph, 2, 0),
+        #     "pressure_3": self._setup_graph(self.ui_main.pressure_graph, 3, 0),
+        #     "thermocouples": self._setup_graph(self.ui_main.thermocouples_graph, 0, 0)
+        # }
+        self.instrument_plots: dict[str, Plot] = {
+            "sample_voltage": Plot(self.ui_main.sample_graph, 0, "V", self.graph_size),
+            "sample_current": Plot(self.ui_main.sample_graph, 1, "I", self.graph_size),
+            "discharge_voltage": Plot(self.ui_main.discharge_graph, 0, "V", self.graph_size),
+            "discharge_current": Plot(self.ui_main.discharge_graph, 1, "I", self.graph_size),
+            "discharge_power": Plot(self.ui_main.discharge_graph, 2, "P", self.graph_size),
+            "cathode_voltage": Plot(self.ui_main.cathode_graph, 0, "V", self.graph_size),
+            "cathode_current": Plot(self.ui_main.cathode_graph, 1, "I", self.graph_size),
+            "cathode_power": Plot(self.ui_main.cathode_graph, 2, "P", self.graph_size),
+            "T_cathode": Plot(self.ui_main.cathode_graph, 3, "T", self.graph_size),
+            "rrg_value": Plot(self.ui_main.pressure_graph, 0, "%", self.graph_size),
+            "pressure_1": Plot(self.ui_main.pressure_graph, 1, "p1", self.graph_size),
+            "pressure_2": Plot(self.ui_main.pressure_graph, 2, "p2", self.graph_size),
+            "pressure_3": Plot(self.ui_main.pressure_graph, 3, "p3", self.graph_size)
+        }
+        self.thermocouple_plots = Plot(self.ui_main.thermocouples_graph, 0, "CH", self.graph_size, curve_number=self.thermocouple_channel_stop)
+    
+    def update_graphs(self):
         pass
 
     def _get_configs(self) -> dict:
@@ -556,6 +630,9 @@ class PLMControl(QtWidgets.QMainWindow):
         self.ui_main.p_1_actual.setText(str('%.2E' % pressure_1))
         self.ui_main.p_2_actual.setText(str('%.2E' % pressure_2))
         self.ui_main.p_3_actual.setText(str('%.2E' % pressure_3))
+
+        for key, plot in self.instrument_plots.items():
+            plot.update(timestamp, instruments[key])
 
     def set_writing_routine(self, instruments: dict, thermocouples: dict, timestamp: float):
         if self.start_db_writing:

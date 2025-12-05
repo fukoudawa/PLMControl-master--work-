@@ -1,5 +1,5 @@
 {
-    "Read_interval": "1",
+    "Read_interval": "0.01",
     "k_value": "165.0",
     "Graph_size": "1000",
     "Path_to_write": "./Data",
