@@ -51,11 +51,11 @@
             "connection_type": "TCPIP"
         }
     ],
-    "RRG_connection": [
+    "RRG": [
         {
-            "COM_port": "COM7",
-            "Baudrate": "19200",
-            "Address": "2"
+            "port": "COM7",
+            "baudrate": 19200,
+            "unit": 2
         }
     ],
     "Thermocouple": [

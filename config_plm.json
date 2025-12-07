@@ -49,7 +49,7 @@
             "connection_type": "TCPIP"
         }
     ],
-    "RRG_connection": [
+    "RRG": [
         {
             "COM_port": "COM3",
             "Baudrate": "19200",

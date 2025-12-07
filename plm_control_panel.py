@@ -403,9 +403,7 @@ class PLMControl(QtWidgets.QMainWindow):
         self.thermocouple_channel_stop = int(self.config['Thermocouple'][0]['Channel_stop'])
         self.thermocouple_fast_read = float(self.config['Thermocouple'][0]['Fast_read'])
 
-        self.rrg_port = self.config['RRG_connection'][0]['COM_port']
-        self.rrg_baudrate = int(self.config['RRG_connection'][0]['Baudrate'])
-        self.rrg_address = int(self.config['RRG_connection'][0]['Address'])
+        self.rrg_config = self.config["RRG"]
 
         self.pressure_1_ip = self.config['Pressure1'][0]['ip']
         self.pressure_1_port = int(self.config['Pressure1'][0]['port'])
@@ -497,11 +495,12 @@ class PLMControl(QtWidgets.QMainWindow):
         if not self.cathode.isInitialized:
             self.ui_main.check_remote_cathode.setDisabled(True)
 
-        self.rrg = RRGInstrument(unit=self.rrg_address, method='rtu', port=self.rrg_port, baudrate=self.rrg_baudrate)
+        self.rrg = RRGInstrument(settings=self.rrg_config[0])
         if not self.rrg.isInitialized:
             self.ui_main.set_rrg_state.setDisabled(True)
-        self.rrg.set_flow(0)
-        self.ui_main.set_rrg_state.setCurrentIndex(1)
+        else:
+            self.rrg.set_flow(0)
+            self.ui_main.set_rrg_state.setCurrentIndex(1) # closed
 
         self.thermocouple = NIDAQInstrument(self.thermocouple_path, 'thermocouples', self.thermocouple_channel_start,
                                             self.thermocouple_channel_stop)

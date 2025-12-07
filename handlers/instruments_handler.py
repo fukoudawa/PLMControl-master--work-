@@ -1,5 +1,6 @@
 from nidaqmx import Task, constants
-from pymodbus.client import ModbusSerialClient
+from pymodbus.client import ModbusSerialClient, ModbusTcpClient
+from pymodbus.framer import FramerRTU
 import socket
 
 
@@ -144,21 +145,31 @@ class SCPIInstrument:
 
 
 class RRGInstrument:
-
-    def __init__(self, unit, method, port, baudrate):
+    # TODO: РРГ сломался, затем нужно поменять конструкцию, чтобы флаг isInitialized устанавливался без ошибок
+    def __init__(self, settings: dict):
         self.isInitialized = bool()
-        self.unit = unit
+        self.unit = settings["unit"]
         try:
-            self.client = ModbusSerialClient(port=port, baudrate=baudrate)
-            self.client.connect()
-            # TODO: РРГ сломался, затем нужно поменять конструкцию, чтобы флаг isInitialized устанавливался без ошибок
-            # self.isInitialized = True
-            
-            print("(+) RRG initialized")
+            match settings["method"]:
+                case "rtu":
+                    self.client = ModbusSerialClient(port=settings["port"], baudrate=settings["baudrate"])
+                    self.client.connect()
+                case "tcp":
+                    self.client = ModbusTcpClient(host=settings["host"], port=settings["port"], framer=FramerRTU)
+                    self.client.connect()
+            if self.client is not None:
+                self.isInitialized = True
+                print("(+) RRG initialized")
+            else:
+                self.isInitialized = False
         except Exception as e:
             self.isInitialized = False
             self.client = None
             print("(!) Failed to initialize RRG:\t", e)
+    
+    def __del__(self):
+        if self.isInitialized:
+            self.client.close()
 
     def _get_holding_registers(self):
         if self.isInitialized:
