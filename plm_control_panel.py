@@ -247,6 +247,8 @@ class PLMControl(QtWidgets.QMainWindow):
 
         self.ui_main.set_rrg_state.currentIndexChanged.connect(self.set_rrg_state)
 
+        self.ui_main.set_gas.currentTextChanged.connect(self.set_gas)
+
     def __del__(self):
         self.reading_thread.terminate()
 
@@ -931,3 +933,10 @@ class PLMControl(QtWidgets.QMainWindow):
         if state == 2:
             self.ui_main.set_rrg.setDisabled(False)
             self.ui_main.set_rrg_slider.setDisabled(False)
+    
+    def set_gas(self):
+        gas = self.ui_main.set_gas.currentText()
+        self.pressure_1.set_gas(gas)
+        self.pressure_2.set_gas(gas)
+        self.pressure_2.set_gas_s2(gas)
+        self.pressure_3.set_gas(gas)

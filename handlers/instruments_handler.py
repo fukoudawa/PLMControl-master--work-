@@ -2,7 +2,7 @@ from nidaqmx import Task, constants
 from pymodbus.client import ModbusSerialClient, ModbusTcpClient
 from pymodbus.framer import FramerRTU
 import socket
-
+import time
 
 class SCPIInstrument:
     """
@@ -372,6 +372,48 @@ class VacuumeterERSTEVAK:
             except:
                 data = 0
         return data
+
+    def set_gas(self, gas: str):
+        Ar = "c000160"
+        He = "c000100"
+        N2 = "c000100"
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(1)
+            s.connect((self.ip, self.port))
+            match gas:
+                case "Аргон": 
+                    s.sendall(self.ERSTVAK_command(self.address, "c1"))
+                    time.sleep(0.1)
+                    s.sendall(self.ERSTVAK_command(self.address, Ar))
+                case "Гелий": 
+                    s.sendall(self.ERSTVAK_command(self.address, "c1"))
+                    time.sleep(0.1)
+                    s.sendall(self.ERSTVAK_command(self.address, He))
+                case "Воздух": 
+                    s.sendall(self.ERSTVAK_command(self.address, "c1"))
+                    time.sleep(0.1)
+                    s.sendall(self.ERSTVAK_command(self.address, N2))
+    
+    def set_gas_s2(self, gas: str):
+        Ar = "c000160"
+        He = "c000100"
+        N2 = "c000100"
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(1)
+            s.connect((self.ip, self.port))
+            match gas:
+                case "Аргон": 
+                    s.sendall(self.ERSTVAK_command(self.address, "c2"))
+                    time.sleep(0.1)
+                    s.sendall(self.ERSTVAK_command(self.address, Ar))
+                case "Гелий": 
+                    s.sendall(self.ERSTVAK_command(self.address, "c2"))
+                    time.sleep(0.1)
+                    s.sendall(self.ERSTVAK_command(self.address, He))
+                case "Воздух": 
+                    s.sendall(self.ERSTVAK_command(self.address, "c2"))
+                    time.sleep(0.1)
+                    s.sendall(self.ERSTVAK_command(self.address, N2))
 
     def ERSTVAK_CRC64(self, command_full):
         crc = 0
