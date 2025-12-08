@@ -538,7 +538,7 @@ class PLMControl(QtWidgets.QMainWindow):
         i_k = 0
         for k, v in thermocouples.items():
             self.ui_main.thermocoples_table.setItem(i_k, 0, QtWidgets.QTableWidgetItem(str(k)))
-            self.ui_main.thermocoples_table.setItem(i_k, 1, QtWidgets.QTableWidgetItem(str(v)))
+            self.ui_main.thermocoples_table.setItem(i_k, 1, QtWidgets.QTableWidgetItem(str(round(v,2))))
             i_k += 1
 
         for key, plot in self.instrument_plots.items():

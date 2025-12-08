@@ -1,1 +1,1 @@
-pyinstaller --onefile --copy-metadata nidaqmx --add-data "..\..\config_main.json;." --distpath "..\..\app" "..\..\main.py"
+pyinstaller --onefile --copy-metadata nidaqmx --copy-metadata nitypes --distpath ".\app" main.py 
